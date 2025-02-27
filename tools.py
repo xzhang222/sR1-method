@@ -11,7 +11,7 @@ import time
 from pyperclip import copy as cp, paste as pst 
 from elements3 import elements
 from scipy.fft import fftn, ifftn 
-import pp  
+import pp  # this module is available from parallelpython.com
 
 job_server = pp.Server(ppservers=())
 ncpus = job_server.get_ncpus()
