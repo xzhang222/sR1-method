@@ -16,6 +16,21 @@ import pp  # this module is available from parallelpython.com
 job_server = pp.Server(ppservers=())
 ncpus = job_server.get_ncpus()
 
+try:
+    with open('a.res','r') as f:
+        text=f.read()
+    lines=text.split('\n')
+    i_FVAR,i_HKLF=0,0
+    for i in range(len(lines)):
+        if lines[i].startswith('FVAR'): i_FVAR=i  
+        if lines[i].startswith('HKLF'):i_HKLF=i 
+    res_start_lines=lines[:i_FVAR+1]
+    res_end_lines=lines[i_HKLF:]
+except:
+    res_start_lines=[]
+    res_end_lines=[]
+
+
 do_pauss=False   
 delay=0.1
 
@@ -5481,7 +5496,8 @@ def find_corrected_peaks2(h,k,l,F2,A,atom_list,heavy_atom,heavy_label,Nheavy,
 def save_history(atom_list,runs,do_copy=True):
     from datetime import datetime
     num = 0
-    text = ''
+    # text = ''
+    model_lines = []
     with open('history.txt','a') as f:
         f.write('\n\n\n\n\n'+str(datetime.now())+'\n')
         f.write('run number: '+str(runs)+'\n\n')
@@ -5498,10 +5514,16 @@ def save_history(atom_list,runs,do_copy=True):
             st = '  11.00 0.05  '
             line = q+xt+yt+zt+st+'\n'
             f.write(line)
-            text += line 
+            # text += line 
+            model_lines.append(line)
         f.write('\n\n\n\n')
-        if do_copy:
-            cp(text)
+        # if do_copy:
+        #     cp(text)
+    res_lines=res_start_lines+model_lines+['','']+res_end_lines
+    with open('a.res','w') as f:
+        for l in res_lines:
+            print(l,file=f)
+
 
 def generate_random_model():
     atom_list = read_atoms('a.res')
