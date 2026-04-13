@@ -20,7 +20,7 @@ Z = 2
 fast=2
           #1: dual space cycling using FFT
           #2: one cycle of sR1 method
-          #222: sR1 method in lottery mode
+          #2223: sR1 method in lottery mode
           #3: find fragment orientations
           #4: filt orientations
           #5: locate fragments
