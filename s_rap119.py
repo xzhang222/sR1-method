@@ -17,7 +17,7 @@ A = matrix_A(res_file)
 
 molecule = 'C78' 
 Z = 2
-fast=222
+fast=2
           #1: dual space cycling using FFT
           #2: one cycle of sR1 method
           #222: sR1 method in lottery mode
