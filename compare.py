@@ -1,5 +1,4 @@
 import sys
-sys.path.insert(0,'C:\\Users\\xzhan\\Documents\\CC4')
 import time 
 from tools import *
 
@@ -10,17 +9,23 @@ with open('history.txt','a') as f:
 
 # show r1 from a.res and a.hkl
 if 0:
-    get_r1()
+    get_r1(0)
     
 if 0:
     re_order()   
 
-if 1:
+if 0:
     generate_random_model()   
 
 if 0:
     atom_list = read_atoms('a.res')
-    save_history(atom_list,runs='current model')    
+    save_history(atom_list,runs='current model')   
+
+if 0:
+    re_arrange() 
+
+if 1:
+    pairing(correct_res='correct.res',res='a.res')
 
 if 0:
     compare_models2(correct_res='correct.res',init_res='a.res',
