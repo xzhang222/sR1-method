@@ -5983,7 +5983,35 @@ def simu_hkl():
 
 
 
-def pairing(correct_res='correct.res',res='a.res'):
+
+def find_pairs(i_models,i_corrects,atom_list,atom_list_correct,A):
+    pairs=[]
+    for i_model in i_models:
+        atom,label,x,y,z=atom_list[i_model]
+        p_model=(x,y,z)
+        dmin=1000000.0
+        pair=None  
+        for i_correct in i_corrects:
+            atom,label,x,y,z=atom_list_correct[i_correct]
+            p_correct=(x,y,z)
+            d=d_min5(p_correct,p_model,A)
+            if d<dmin:
+                dmin=d 
+                pair=(i_model,i_correct,dmin)
+        pairs.append(pair)
+    return pairs 
+
+
+def invert_model(res='a.res'):
+    # read the model
+    atom_list = read_atoms(res)
+    for i in range(len(atom_list)):
+        atom,label,x,y,z=atom_list[i]
+        atom_list[i]=(atom,label,-x,-y,-z)
+    save_history(atom_list,'inverted model',do_copy=True)
+    print('model has been inverted')
+
+def pairing2(correct_res='correct.res',res='a.res', s=0.5):
     # read correct model
     atom_list_correct = read_atoms(correct_res)
     # read the model
@@ -5996,7 +6024,239 @@ def pairing(correct_res='correct.res',res='a.res'):
             print('not same number of atoms, please check!',file=f)
             print('# atoms in correct model = ',len(atom_list_correct),'# atoms in the model = ',len(atom_list),file=f)
 
+    if len(atom_list_correct)>len(atom_list):
+        Ntarget=len(atom_list)
+    else:
+        Ntarget=len(atom_list_correct)
+
+    to_overlaps=[]
+    for i in range(len(atom_list)):
+        for j in range(len(atom_list_correct)):
+            to_overlaps.append((i,j))
+
     A = matrix_A(correct_res)
+
+    if 0:
+        N_best_match,best_overlap=158,(0,0)
+    else:
+        best_overlap,N_best_match=None,0
+        i_current=0
+        i_skip=None  
+        while to_overlaps:
+            i,j=to_overlaps.pop(0)
+            if i==i_skip: continue
+            print((i,j),end='   ')
+            if i_current==i:
+                i_current+=1
+                count=1
+                for i_model,i_correct in to_overlaps:
+                    if i_model==i: count+=1  
+                if count<=N_best_match: 
+                    print('')
+                    i_skip=i  
+                    continue  
+            atom,label,xi,yi,zi=atom_list[i]
+            atom,label,xj,yj,zj=atom_list_correct[j]
+            dx,dy,dz=xj-xi,yj-yi,zj-zi
+            atom_list_shifted=[]
+            for atom,label,x,y,z in atom_list:
+                atom_list_shifted.append((atom,label,x+dx,y+dy,z+dz))
+            N_match=0
+            i_corrects=list(range(len(atom_list_correct)))
+            for i_model in range(len(atom_list_shifted)):
+                atom,label,x,y,z=atom_list_shifted[i_model]
+                p_model=(x,y,z)
+                dmin=1000000.0
+                i_correct_matched=None 
+                for i_correct in i_corrects:
+                    atom,label,x,y,z=atom_list_correct[i_correct]
+                    p_correct=(x,y,z)
+                    d=d_min5(p_correct,p_model,A)
+                    if d<dmin:
+                        dmin=d 
+                        i_correct_matched=i_correct
+                if dmin<s:
+                    N_match+=1
+                    try:
+                        to_overlaps.remove((i_model,i_correct_matched))
+                    except:
+                        pass 
+            if N_match>N_best_match:
+                N_best_match=N_match
+                best_overlap=(i,j)
+                if N_best_match==Ntarget: break
+            print('N_best_match = ',N_best_match,'   best overlap = ',best_overlap)
+    with open('history.txt','a') as f:
+        print('N_best_match = ',N_best_match,file=f)
+        print('best overlap = ',best_overlap,file=f)
+
+    i,j=best_overlap
+    atom,label,xi,yi,zi=atom_list[i]
+    atom,label,xj,yj,zj=atom_list_correct[j]
+    dx,dy,dz=xj-xi,yj-yi,zj-zi
+    atom_list_shifted=[]
+    for atom,label,x,y,z in atom_list:
+        atom_list_shifted.append((atom,label,x+dx,y+dy,z+dz))
+    atom_list=atom_list_shifted[:]
+
+    i_models=list(range(len(atom_list)))
+    i_corrects=list(range(len(atom_list_correct)))
+    pairs=find_pairs(i_models,i_corrects,atom_list,atom_list_correct,A)
+    pairs.sort(key=lambda ss:ss[2])
+    pairs.sort(key=lambda ss:ss[1])
+    i_correct_previous=None
+    for i_model,i_correct,d in pairs:
+        if i_correct==i_correct_previous:
+            pairs.remove((i_model,i_correct,d))
+        i_correct_previous=i_correct
+
+    dps=[]
+    for i_model,i_correct,d in pairs:
+        atom,label,x,y,z=atom_list[i_model]
+        atom,label,xc,yc,zc=atom_list_correct[i_correct]
+        p1=numpy.array((xc,yc,zc))
+        p2=(x,y,z)
+        d,p2p=d_min4(p1,p2,A)
+        dp=p1-p2p
+        if d<s:
+            dps.append(dp)
+    def target(p):
+        x,y,z=p
+        dr=numpy.array((-x,-y,-z))
+        dt=0.0
+        for dp in dps:
+            dt+=dis_exact(dp+dr,A)
+        return dt 
+    p0=0.0,0.0,0.0
+    res=minimize(target,p0,method='BFGS')
+    dx,dy,dz=res.x 
+    atom_list_shifted=[]
+    for atom,label,x,y,z in atom_list:
+        atom_list_shifted.append((atom,label,x+dx,y+dy,z+dz))
+    atom_list=atom_list_shifted[:]
+    save_history(atom_list,'shifted to match correct model',do_copy=True)
+
+
+    i_models=list(range(len(atom_list)))
+    i_corrects=list(range(len(atom_list_correct)))
+    pairs=find_pairs(i_models,i_corrects,atom_list,atom_list_correct,A)
+    while True:
+        pairs.sort(key=lambda ss:ss[2])
+        pairs.sort(key=lambda ss:ss[1])
+        i_correct_previous,i_model_missed,i_correct_used=None,[],[]
+        for i_model,i_correct,d in pairs:
+            if i_correct==i_correct_previous:
+                pairs.remove((i_model,i_correct,d))
+                i_model_missed.append(i_model)
+            else:
+                i_correct_used.append(i_correct)
+            i_correct_previous=i_correct
+        if not i_model_missed: break
+        i_correct_left=[]
+        for i in i_corrects:
+            if i not in i_correct_used:
+                i_correct_left.append(i)
+        pairs_missed=find_pairs(i_model_missed,i_correct_left,atom_list,atom_list_correct,A)
+        pairs+=pairs_missed
+
+    i_correct_matched=[]
+    for i_model,i_correct,d in pairs:
+        i_correct_matched.append(i_correct)
+        atom,label,x,y,z=atom_list[i_model]
+        atom,label,xc,yc,zc=atom_list_correct[i_correct]
+        atom_list[i_model]=(atom,label,x,y,z)
+    save_history(atom_list,'label corrected',do_copy=True)
+
+    from datetime import datetime
+    num = 0
+    letters=['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w',
+             'x','y','z']
+    mix=[]
+    for i in range(10):
+        for l in letters:
+            mix.append(str(i)+l)
+    i_a=0
+    old_atom='q'
+    # text = ''
+    model_lines = []
+    with open('history.txt','a') as f:
+        f.write('\n\n\n\n\n'+str(datetime.now())+'\n')
+        f.write('run number: correct marked \n\n')
+        for i in range(len(atom_list_correct)):
+            a,l,x,y,z=atom_list_correct[i]
+            l=label_dic[a]
+            if a==old_atom:
+                i_a+=1  
+            else:
+                i_a=0
+                old_atom=a  
+            num += 1
+            if len(a+str(num))<5:
+                old_atom='q'
+                str_num=str(num)
+            else:
+                str_num=mix[i_a]
+            q = st3(a+str_num)+l
+            xt = st2(round(x+0,4))
+            yt = st2(round(y+0,4))
+            zt = st2(round(z+0,4))
+            if i in i_correct_matched:
+                st = '  11.00 0.05  '
+            else:
+                st = '  11.00 0.10  '
+            line = q+xt+yt+zt+st+'\n'
+            f.write(line)
+            # text += line 
+            model_lines.append(line.strip())
+        f.write('\n\n\n\n')
+    res_lines=res_start_lines+model_lines+['','']+res_end_lines
+    with open('correct_marked.res','w') as f:
+        for l in res_lines:
+            print(l,file=f)
+
+    #return
+
+    dmin,dmax=100000.0,-100000.0
+    distribution=[0,0,0,0,0,0,0]
+    for i_model,i_correct,d in pairs:
+        if d<dmin: dmin=d 
+        if d>dmax: dmax=d 
+        if d<0.2: distribution[0]+=1
+        if 0.2<=d<0.4: distribution[1]+=1
+        if 0.4<=d<0.6: distribution[2]+=1
+        if 0.6<=d<0.8: distribution[3]+=1
+        if 0.8<=d<1.0: distribution[4]+=1
+        if 1.0<=d<1.2: distribution[5]+=1
+        if d>=1.2: distribution[6]+=1
+    with open('history.txt','a') as f:
+        print('0 to 0.2,',distribution[0],file=f)
+        print('0.2 to 0.4,',distribution[1],file=f)
+        print('0.4 to 0.6,',distribution[2],file=f)
+        print('0.6 to 0.8,',distribution[3],file=f)
+        print('0.8 to 1.0,',distribution[4],file=f)
+        print('1.0 to 1.2,',distribution[5],file=f)
+        print('1.2 to ,',distribution[6],file=f)
+        print('\n\n\n')
+    print('all done')
+    #return
+
+    print('minimum d = ', dmin, ',  maximum d = ', dmax,'\n\n')
+    with open('history.txt','a') as f:
+        print('minimum d = ', dmin, ',  maximum d = ', dmax,'\n\n',file=f)
+
+    with open('history.txt','a') as f:
+        pairs.sort(key=lambda ss:ss[2])
+        count=0
+        for pair in pairs:
+            count+=1
+            print(pair,count,file=f)
+
+    with open('history.txt','a') as f:
+        print('\n\n\n',file=f)
+        pairs.sort(key=lambda ss:ss[1])
+        for pair in pairs:
+            print(pair,file=f)
+    #return
 
     pairs=[]
     for i_model in range(len(atom_list)):
@@ -6013,41 +6273,11 @@ def pairing(correct_res='correct.res',res='a.res'):
                 pair=(i_model,i_correct,dmin)
         pairs.append(pair)
 
-    dmin,dmax=100000.0,-100000.0
-    distribution=[0,0,0,0]
+    atom_list_filt=[]
     for i_model,i_correct,d in pairs:
-        if d<dmin: dmin=d 
-        if d>dmax: dmax=d 
-        if d<0.1: distribution[0]+=1
-        if 0.1<=d<0.2: distribution[1]+=1
-        if 0.2<=d<0.3: distribution[2]+=1
-        if d>=0.3: distribution[3]+=1
-    with open('history.txt','a') as f:
-        print('0 to 0.1,',distribution[0],file=f)
-        print('0.1 to 0.2,',distribution[1],file=f)
-        print('0.2 to 0.3,',distribution[2],file=f)
-        print('0.3 to 0.41,',distribution[3],file=f)
-        print('\n\n\n')
-    print('all done')
-    return
-
-    print('minimum d = ', dmin, ',  maximum d = ', dmax,'\n\n')
-    with open('history.txt','a') as f:
-        print('minimum d = ', dmin, ',  maximum d = ', dmax,'\n\n',file=f)
-
-    with open('history.txt','a') as f:
-        pairs.sort(key=lambda ss:ss[2])
-        for pair in pairs:
-            print(pair)
-            print(pair,file=f)
-
-    with open('history.txt','a') as f:
-        print('\n\n\n')
-        print('\n\n\n',file=f)
-        pairs.sort(key=lambda ss:ss[1])
-        for pair in pairs:
-            print(pair)
-            print(pair,file=f)
+        if d<0.8:
+            atom_list_filt.append(atom_list[i_model])
+    #save_history(atom_list_filt,'filtered model',do_copy=True)            
 
     print('\n\nall done!')
 
@@ -6055,119 +6285,6 @@ def pairing(correct_res='correct.res',res='a.res'):
 
 
 
-
-def compare_models3(correct_res='correct.res',res='a.res',s=0.5):
-    # read correct model
-    atom_list_correct = read_atoms(correct_res)
-    # read the model
-    atom_list = read_atoms(res)
-    # check if same number of atoms
-    if len(atom_list_correct)!=len(atom_list):
-        print('not same number of atoms, please check!')
-        print('# atoms in correct model = ',len(atom_list_correct),'# atoms in the model = ',len(atom_list))
-
-    A = matrix_A(correct_res)
-
-    (i_correct,i_model),Nmatch,inverted=matching3(atom_list_correct,atom_list,A,s)
-    if inverted:
-        atom_list_inverted=[]
-        for atom,label,x,y,z in atom_list:
-            atom_list_inverted.append((atom,label,-x,-y,-z))
-        atom_list=atom_list_inverted[:]
-
-    atom,label,xc,yc,zc=atom_list_correct[i_correct]
-    atom,label,x,y,z=atom_list[i_model]
-    dx,dy,dz=xc-x,yc-y,zc-z
-    for i in range(len(atom_list)):
-        atom,label,x,y,z=atom_list[i]
-        atom_list[i]=(atom,label,x+dx,y+dy,z+dz)
-
-    dots_set_correct,dots_dict_correct=digitize_model(atom_list_correct,A,s)
-    dots_set,dots_dict=digitize_model(atom_list,A,s)
-
-    duplicating=False
-    print('In the correct model,')
-    for ids in dots_dict_correct.values():
-        if len(ids)>1:
-            duplicating=True 
-            ids=list(ids)
-            ids.sort()
-            print('these atoms are duplicating: ',end=' ')
-            for i in ids:
-                print(i,end=', ')
-            print('')
-    if not duplicating:
-        print('no atoms are duplicating.')
-
-    duplicating=False
-    print('\n\nIn the model,')
-    for ids in dots_dict.values():
-        if len(ids)>1:
-            duplicating=True 
-            ids=list(ids)
-            ids.sort()
-            print('these atoms are duplicating: ',end=' ')
-            for i in ids:
-                print(i,end=', ')
-            print('')
-    if not duplicating:
-        print('no atoms are duplicating.')
-
-    print('\n\nWhen atom ',i_model,' in the model overlaps atom ',i_correct,' in the correct model,')
-    print('the two models have ',Nmatch,' atoms overlap.')
-
-    return (atom_list,(i_correct,i_model),Nmatch)
-
-def matching3(atom_list_correct,atom_list,A,s):
-    (i_correct,i),Nmatch=mid_matching3(atom_list_correct,atom_list,A,s)
-    atom_list_inverted=[]
-    for atom,label,x,y,z in atom_list:
-        atom_list_inverted.append((atom,label,-x,-y,-z))
-    (i_correct_inv,i_inv),Nmatch_inv=mid_matching3(atom_list_correct,atom_list_inverted,A,s)
-    inverted=False
-    if Nmatch_inv>Nmatch:
-        inverted=True  
-        return (i_correct_inv,i_inv),Nmatch_inv,inverted
-    else:
-        return (i_correct,i),Nmatch,inverted
-
-def mid_matching3(atom_list_correct,atom_list,A,s):
-    dots_set_correct,dots_dict_correct=digitize_model(atom_list_correct,A,s)
-    dots_set,dots_dict=digitize_model(atom_list,A,s)
-    dots_list_correct=list(dots_set_correct)
-    dots_list=list(dots_set)
-    a,b,c=abc(A)
-    Nx,Ny,Nz=int(a/s),int(b/s),int(c/s)
-    Nmatch_best,i_correct_best,i_best=-100,None,None  
-    for i_correct, (nxc,nyc,nzc) in enumerate(dots_list_correct):
-        for i, (nx,ny,nz) in enumerate(dots_list):
-            dnx,dny,dnz=nxc-nx,nyc-ny,nzc-nz
-            dots_set_shifted=set()
-            for (nx1,ny1,nz1) in dots_list:
-                (nx2,ny2,nz2)=(nx1+dnx,ny1+dny,nz1+dnz)
-                (nx2,ny2,nz2)=keep_in_N(nx2,ny2,nz2,Nx,Ny,Nz)
-                dots_set_shifted.add((nx2,ny2,nz2))
-            Nmatch=len(dots_set_shifted.intersection(dots_set_correct))
-            if Nmatch>Nmatch_best:
-                Nmatch_best,i_correct_best,i_best=Nmatch,i_correct,i 
-    return (i_correct_best,i_best),Nmatch_best
-
-
-def digitize_model(atom_list,A,s):
-    atoms,labels,solution=atomj_solution(atom_list)
-    a,b,c=abc(A)
-    Nx,Ny,Nz=int(a/s),int(b/s),int(c/s)
-
-    dots_set=set()
-    dots_dict={}
-    for i in range(len(solution)):
-        x,y,z=solution[i]
-        nx,ny,nz=nxnynz(x,y,z,Nx,Ny,Nz)
-        dots_set.add((nx,ny,nz))
-        if (nx,ny,nz) not in dots_dict:
-            dots_dict[(nx,ny,nz)]=set()
-        dots_dict[(nx,ny,nz)].add(i)
-    return (dots_set,dots_dict)
 
 
 
@@ -6183,144 +6300,6 @@ def keep_in_N(nx,ny,nz,Nx,Ny,Nz):
     if ny>=Ny: ny-=Ny  
     if nz>=Nz: nz-=Nz  
     return (nx,ny,nz)
-
-
-
-def compare_models2(correct_res='correct.res',init_res='init.res',
-    compare_txt='compare.txt',Ntry=None,r0=0.501):
-    # read correct model
-    atom_list1 = read_atoms(correct_res)
-    # read initial model
-    atom_list2 = read_atoms(init_res)
-    # check if same number of atoms
-    if len(atom_list1)!=len(atom_list2):
-        print('not same number of atoms, please check!')
-        print(len(atom_list1),len(atom_list2))
-        #return
-    A = matrix_A(correct_res)
-    atomj,atom_labels,solution1 = atomj_solution(atom_list1)
-    atomj,atom_labels,solution2 = atomj_solution(atom_list2)
-    Nmatch,imatch,jmatch=matching2(solution1,solution2,A,Ntry,r0)
-    with open('history.txt','a') as f:
-        print('\n\n\n',file=f)
-        print(f'{Nmatch} out of {len(solution1)} all atoms are located within 0.5 A.',file=f)
-        print(Nmatch,imatch,jmatch,file=f)
-        print('\n\n\n',file=f)
-    print(f'{Nmatch} out of {len(solution1)} all atoms are located within 0.5 A.')
-    print(Nmatch,imatch,jmatch)
-    return (Nmatch,imatch,jmatch)
-
-def compare_models(atom_list1,atom_list2,A,r0=0.5): 
-    atoms1,labels1,s1=atomj_solution(atom_list1)
-    atoms2,labels2,s2=atomj_solution(atom_list2)
-    return matching2(s1,s2,A,Ntry=None,r0=r0)
-
-def matching2(solution1,solution2,A,Ntry=None,r0=0.501): # solution1 is the correct solution
-    Nmatch1,imatch1,jmatch1=mid_matching2(solution1,solution2,A,Ntry,r0)
-    with open('history.txt','a') as f:
-        print('\n\n\nNmatch1 = ',Nmatch1,file=f)
-    if Nmatch1==len(solution2): return (Nmatch1,imatch1,jmatch1)
-    for i in range(len(solution1)):
-        x,y,z = solution1[i]
-        solution1[i]=(-x,-y,-z)
-    Nmatch2,imatch2,jmatch2=mid_matching2(solution1,solution2,A,Ntry,r0)
-    with open('history.txt','a') as f:
-        print('\n\n\nNmatch2 = ',Nmatch2,file=f)
-    if Nmatch1>Nmatch2:
-        return (Nmatch1,imatch1,jmatch1)
-    else:
-        return (Nmatch2,-imatch2,jmatch2)
-
-
-def mid_matching2(solution1,solution2,A,Ntry=None,r0=0.501):
-    s1=[numpy.array(s) for s in solution1]
-    s2=[numpy.array(s) for s in solution2]
-    Ns=[]
-    if Ntry is None: 
-        Ntry=len(s1)
-    else:
-        Ntry=min(Ntry,len(s1))
-    ilist=list(range(Ntry))
-
-    N1,N2=len(s1),len(s2)
-    for i in range(N1):
-        s1[i]=numpy.array((put_in_cell(s1[i][0]),put_in_cell(s1[i][1]),put_in_cell(s1[i][2])))
-    for i in range(N2):
-        s2[i]=numpy.array((put_in_cell(s2[i][0]),put_in_cell(s2[i][1]),put_in_cell(s2[i][2])))
-
-    a,b,c=abc(A)
-    ss=r0
-    Nx,Ny,Nz=int(a/ss),int(b/ss),int(c/ss)
-    M1=numpy.zeros((Nx,Ny,Nz))
-
-    for x,y,z in s1:
-        nx=int(x*Nx)
-        nx1,nx2=nx-1,nx+2
-        ny=int(y*Ny)
-        ny1,ny2=ny-1,ny+2
-        nz=int(z*Nz)
-        nz1,nz2=nz-1,nz+2
-        for ix in range(nx1,nx2):
-            if ix<0:ix+=Nx 
-            if ix>=Nx:ix-=Nx 
-            for iy in range(ny1,ny2):
-                if iy<0:iy+=Ny 
-                if iy>=Ny:iy-=Ny 
-                for iz in range(nz1,nz2):
-                    if iz<0:iz+=Nz 
-                    if iz>=Nz:iz-=Nz 
-                    M1[ix,iy,iz]=1 
-
-
-    def get_match2(ilist,s1,s2,A,r0,M1,Nx,Ny,Nz):
-        Nmax,imax,jmax=-100,None,None   
-        for i in ilist:
-            p1=s1[i]
-            for j in range(len(s2)):
-                p2=s2[j]
-                S2=[s-p2+p1 for s in s2]
-                M2=numpy.zeros((Nx,Ny,Nz))
-                N=partial_matching2(S2,M1,M2,Nx,Ny,Nz)
-                if N>Nmax:
-                    Nmax,imax,jmax=N,i,j 
-                    if Nmax==len(s2): return (Nmax,imax,jmax)
-        return (Nmax,imax,jmax)
-
-    dn=int(Ntry/ncpus)+1
-    n1,n2=-dn,0 
-    jobs=[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(get_match2,(ilist[n1:n2],s1,s2,A,r0,M1,
-            Nx,Ny,Nz),
-            (partial_matching2,put_in_cell,abc),
-            ('numpy',),globals=globals()))
-
-    Nmax,imax,jmax=-100,None,None 
-    for job in jobs:
-        N,i,j=job()
-        if N>Nmax: 
-            Nmax,imax,jmax=N,i,j
-            if Nmax==len(s2): 
-                print(Nmax,imax,jmax)
-                return (Nmax,imax,jmax)
-
-    print(Nmax,imax,jmax)
-    return (Nmax,imax,jmax)
-
-
-def partial_matching2(s2,M1,M2,Nx,Ny,Nz):#partial_matching2(s1,s2,A,r0=0.501): 
-    N2=len(s2)
-    for i in range(N2):
-        x,y,z=put_in_cell(s2[i][0]),put_in_cell(s2[i][1]),put_in_cell(s2[i][2])
-        nx=int(x*Nx)
-        ny=int(y*Ny)
-        nz=int(z*Nz)
-        M2[nx,ny,nz]=1 
-
-    Nmatch=(M1*M2).sum()
-    Nmatch=int(Nmatch+0.5)
-    return Nmatch
 
 
 

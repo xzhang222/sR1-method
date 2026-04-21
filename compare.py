@@ -9,7 +9,7 @@ with open('history.txt','a') as f:
 
 # show r1 from a.res and a.hkl
 if 0:
-    get_r1(0)
+    get_r1()
     
 if 0:
     re_order()   
@@ -25,11 +25,10 @@ if 0:
     re_arrange() 
 
 if 1:
-    pairing(correct_res='correct.res',res='a.res')
+    pairing2(correct_res='correct.res',res='a.res', s=0.5)
 
 if 0:
-    compare_models2(correct_res='correct.res',init_res='a.res',
-        compare_txt='compare.txt',Ntry=None,r0=0.500)
+    invert_model(res='a.res')
     
 with open('history.txt','a') as f:
     print('\n\n\nstep:  \n\n\n',file=f)
