@@ -10,4 +10,6 @@ The correct.res contains the correct model. To compare the resulting model in a.
 Note: you may change s_rap119.py to any filename you like. But a.hkl and a.res are the default names for input and output.
 
 Special note about module pp:  module pp is available from parallelpython.com
+Due to some unknown bug in the pp module, the whole program ends with some error messages like 'ERROR: The process "10852" not found.' These can be ignored, and the calculation ends correctly.
+
 
