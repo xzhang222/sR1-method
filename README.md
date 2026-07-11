@@ -31,14 +31,20 @@ def make_benzene():
     return (benzene,n_fold) 
 
 To use this model, in s_rap119.py just uncomment this line:
+
 #fragment0,n_fold=make_benzene()
+
 and change orientation filename in this line:
+
 orientation_file='orientations_benzene.txt'
 
 Now run s_rap119.py with fast=3 once, and run with fast=4 once. To this point, the orientations of benzene rings are saved in orientation_benzene.txt file. 
+
 To add two benzene rings with orientations 0 and 1 to the current partial model, edit these lines in s_rap119.py as:
+
 free_standing=0  # 1: very first 0: add to a partial structure
 orientation_selected=[0,1] # orientations are labeled as 0, 1, 2...
+
 If the first ring is really the very first fragment of the model, then use free_standing=1.
 
 You may convert the structure shown in a.res to a model of a fragment. To do this you need to use compare.py. In compare.py are a set of tools, each is turned on and off by if 1: and if 0: The following section is for making a model:
@@ -64,11 +70,14 @@ if 1: # molecular model
             print(a,l,x,y,z,file=f)
 
 The model will be saved to C5.txt. The line requires editing is:
+
     p1,p2,p3=s[0],s[3],s[1]
+
 The local origin will set at p1, x direction is from p1 to p2, y direction is set by p1->p3: vector p1->p3 divides into a component along p1->p2 and another component perpendicular to p1->p2, the perpendicular component is the y direction.
 So, the above line reads as: p1 uses the first atom s[0], p2 uses the 4th atom s[3], and p3 uses the 2nd atom s[1], in a.res.
 
 To use model saved in C5.txt you need to edit these lines in s_rap119.py:
+
 orientation_file='orientations_C5.txt'
 
 fragment0,n_fold=make_molecule('C5.txt')
@@ -96,6 +105,11 @@ You may run s_rap119.py with fast=56 to attach two fragments to the current mode
             print('sR1 = '+str(r11))
 
 In this case, only the line 
+
         for i in [2,4]:
+
+needs editing.
+
+
 need editing.
 
