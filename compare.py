@@ -18,7 +18,7 @@ if 0:
     atom_list = read_atoms('a.res')
     save_history(atom_list,runs='current model')   
 
-if 1:
+if 0:
     re_arrange() 
 
 if 0:
@@ -33,7 +33,7 @@ if 0: # molecular model
     atoms,labels,s=atomj_solution(atom_list)
     for i in range(len(s)):
         s[i]=numpy.array(s[i])
-    p1,p2,p3=s[0],s[2],s[1]
+    p1,p2,p3=s[0],s[6],s[1]
     #p3=numpy.array([0.3,0.3,0.3])
     A = matrix_A('a.res')
     xp,yp,zp=local_xpypzp(p1,p2,p3,A)
@@ -43,7 +43,7 @@ if 0: # molecular model
     for i in range(len(s)):
         x,y,z=s[i]
         atom_list.append((atoms[i],labels[i],x,y,z))
-    with open('OC4.txt','w') as f:
+    with open('MoO4SiC16_i.txt','w') as f:
         for a,l,x,y,z in atom_list:
             print(a,l,x,y,z,file=f)
             #print(a,l,-x,-y,-z,file=f)
