@@ -19,6 +19,7 @@ You need some editing work in s_rap119.py, sometime even in toos.py, compare.py.
 
 First, you need to set up a model for the fragment. In tools.py the make_benzene() function is one example of setting up an idealized benzene model:
 
+
 def make_benzene():
     # 6-fold rotation axis along x-axis
     n_fold=6
