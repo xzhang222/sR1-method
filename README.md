@@ -21,14 +21,23 @@ First, you need to set up a model for the fragment. In tools.py the make_benzene
 
 
 def make_benzene():
+
     # 6-fold rotation axis along x-axis
+	
     n_fold=6
+	
     r=1.39 
+	
     benzene=[]
+	
     for i in range(6):
+	
         th=radians(60.0*i)
+		
         y,z=r*cos(th),r*sin(th)
+		
         benzene.append(('C','1',0.0,y,z))
+		
     return (benzene,n_fold) 
 
 
@@ -52,23 +61,41 @@ If the first ring is really the very first fragment of the model, then use free_
 You may convert the structure shown in a.res to a model of a fragment. To do this you need to use compare.py. In compare.py are a set of tools, each is turned on and off by if 1: and if 0: The following section is for making a model:
 
 if 1: # molecular model
+
     atom_list=read_atoms('a.res')
+	
     #save_history(atom_list,runs='starting model')
+	
     atoms,labels,s=atomj_solution(atom_list)
+	
     for i in range(len(s)):
+	
         s[i]=numpy.array(s[i])
+		
     p1,p2,p3=s[0],s[3],s[1]
+	
     #p3=numpy.array([0.3,0.3,0.3])
+	
     A = matrix_A('a.res')
+	
     xp,yp,zp=local_xpypzp(p1,p2,p3,A)
+	
     for i in range(len(s)):
+	
         s[i]=cell_to_local_cartesian(s[i],p1,xp,yp,zp,A)
+		
     atom_list=[]
+	
     for i in range(len(s)):
+	
         x,y,z=s[i]
+		
         atom_list.append((atoms[i],labels[i],x,y,z))
+		
     with open('C5.txt','w') as f:
+	
         for a,l,x,y,z in atom_list:
+		
             print(a,l,x,y,z,file=f)
 
 The model will be saved to C5.txt. The line requires editing is:
@@ -88,22 +115,37 @@ You may run s_rap119.py with fast=56 to attach two fragments to the current mode
 
 
     if fast==56: # completing model: origin known, 
+	
                  # searching orientation
+				 
         for i in [2,4]:
+		
             atom_list=read_atoms('a.res')
+			
             #save_history(atom_list,'starting model',True)
 
             atoms,labels,s=atomj_solution(atom_list)
+			
             s=[numpy.array(p) for p in s]
+			
             p=s[i-1]
+			
             atom_list=find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list,
+			
                 fragment0,n_fold,p,orientation_file,
+				
                 max_orientations=max_orientations,s_angle=s_angle,
+				
                 starttime=starttime,runs='find fragment orientations')
+				
             #atom_list=relax_model(atom_list,f2a,h,k,l,Fo,Fosum,A,content,starttime)
+			
             #save_history(arrange(atom_list),'final model',True)
+			
             r11=get_sR1(atom_list,h,k,l,f2a,sl,Fo,Fosum,content)
+			
             save_history(atom_list,'sR1 = '+str(r11),True)
+			
             print('sR1 = '+str(r11))
 
 In this case, only the line 
