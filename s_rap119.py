@@ -4,7 +4,7 @@ from tools import *
 
 molecule = 'C78'
 Z = 2
-fast=56
+fast=2
           #1: 2Fo-Fc dual space recycling
           #2: sR1 #2223: sR1 in lottery mode #200: bond length guided sR1
           #3: find fragment orientations  #4: filter orientations
