@@ -31,6 +31,7 @@ def make_benzene():
         benzene.append(('C','1',0.0,y,z))
     return (benzene,n_fold) 
 
+
 To use this model, in s_rap119.py just uncomment this line:
 
 #fragment0,n_fold=make_benzene()
@@ -110,7 +111,4 @@ In this case, only the line
         for i in [2,4]:
 
 needs editing.
-
-
-need editing.
 
