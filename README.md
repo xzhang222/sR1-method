@@ -1,5 +1,7 @@
 # sR1-method
-Python codes for single-atom R1 method and partial-structure R1 method
+Python codes for single-atom R1 (sR1) and partial-structure R1 (pR1) calculations
+
+About single-atom R1 (sR1) calculation:
 
 The included a.hkl and a.res provide one example of raw data files. At the start, a.res provides initial model. If this model contains a single atom, the program will generate a random poisition for it. If the model contains multiple atoms, the input model will be used as is. After calculation, the resulting model is written to a.res. The starting model, intermediate calculation steps, and the resulting model are also recorded in the history.txt file. The main user interface is s_rap119.py. In cmd window change directory to the folder where a.res etc. are located then type "python s_rap119.py" to solve the structure by the single-atom R1 method. 
 
@@ -11,6 +13,10 @@ Note: you may change s_rap119.py to any filename you like. But a.hkl and a.res a
 
 Special note about module pp:  module pp is available from parallelpython.com
 Due to some unknown bug in the pp module, the whole program ends with some error messages like 'ERROR: The process "10852" not found.' These can be ignored, and the calculation ends correctly.
+
+About dual-space recycling: You run s_rap119.py with fast=1 to do 2Fo-Fc recycling calculation. No phase refinement implemented. Only some electron density modification via peak picking.
+
+About bond length guided sR1 calculation: run s_rap119.py with fast=200 to perform bond length guided calculation. Suppose you want to add one C atom to atom #10 with bond length between 1.09 A and 1.69 A, add one S atom to atom #20 with bond length between 1.4 A and 2.0 A, you can set cases=[(10,"C",1.39,0.3),(20,"S",1.7,0.3)]. Note that atoms are numbered starting from 1, not from 0, sorry!
 
 
 About partial-structure R1 (pR1) calculations:
@@ -154,3 +160,4 @@ In this case, only the line
 
 needs editing.
 
+More parameters for pR1 calculations: if you are expecting many possible orientations you may increase max_orientations=10 to max_orientations=1000. You may decrease searching step size from s_angle=20.0 to s_angle=5.0, however, doing that will greatly increase calculation time.
