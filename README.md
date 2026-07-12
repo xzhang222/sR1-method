@@ -121,6 +121,11 @@ orientation_file='orientations_C5.txt'
 
 fragment0,n_fold=make_molecule('C5.txt')
 
+Note that, use the following if you want the inverted version of a model:
+
+fragment0,n_fold=make_invert_molecule('SiPh2tBuMoO4.txt')
+
+
 You may run s_rap119.py with fast=56 to attach two fragments to the current model such that the local origins of the fragments are attached to the 2nd and 4th atoms. In this case, you need to edit the following section in tools.py:
 
 
