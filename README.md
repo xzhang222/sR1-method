@@ -23,7 +23,7 @@ About bond length guided sR1 calculation: run s_rap119.py with fast=200 to perfo
 
 About partial-structure R1 (pR1) calculations:
 
-You need some editing work in s_rap119.py, sometime even in toos.py, compare.py.
+You need some editing work in s_rap119.py, sometime even in tools.py, compare.py.
 
 First, you need to set up a model for the fragment. In tools.py the make_benzene() function is one example of setting up an idealized benzene model:
 
