@@ -165,3 +165,10 @@ In this case, only the line
 needs editing.
 
 More parameters for pR1 calculations: if you are expecting many possible orientations you may increase max_orientations=10 to max_orientations=1000. You may decrease searching step size from s_angle=20.0 to s_angle=5.0, however, doing that will greatly increase calculation time.
+
+About tweaking the model to optimally agree with experimental data: run s_rap119.py with fast=6. Note that tweaking is automatically performed during the sR1 calculation.
+
+About generating residual reflection intensities: run s_rap119.py with fast=8. Residual hkl data will be saved to a_dif.hkl. Save the original a.hkl as a_original.hkl, save a_dif.hkl as a.hkl to use the residual hkl for searching orientations of a light-atom-only fragment. Remember to save a_original.hkl back as a.hkl before doing further calculations.
+
+Contact Xiaodong Zhang at xzhang2@tulane.edu for further assistance.
+
