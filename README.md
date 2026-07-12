@@ -14,6 +14,8 @@ Note: you may change s_rap119.py to any filename you like. But a.hkl and a.res a
 Special note about module pp:  module pp is available from parallelpython.com
 Due to some unknown bug in the pp module, the whole program ends with some error messages like 'ERROR: The process "10852" not found.' These can be ignored, and the calculation ends correctly.
 
+To do sR1 calculation you need set fast=2 in s_rap119.py. Usage of some other settings of "fast" parameter is explained below.
+
 About dual-space recycling: You run s_rap119.py with fast=1 to do 2Fo-Fc recycling calculation. No phase refinement implemented. Only some electron density modification via peak picking.
 
 About bond length guided sR1 calculation: run s_rap119.py with fast=200 to perform bond length guided calculation. Suppose you want to add one C atom to atom #10 with bond length between 1.09 A and 1.69 A, add one S atom to atom #20 with bond length between 1.4 A and 2.0 A, you can set cases=[(10,"C",1.39,0.3),(20,"S",1.7,0.3)]. Note that atoms are numbered starting from 1, not from 0, sorry!
