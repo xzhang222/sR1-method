@@ -175,5 +175,37 @@ About tweaking the model to optimally agree with experimental data: run s_rap119
 
 About generating residual reflection intensities: run s_rap119.py with fast=8. Residual hkl data will be saved to a_dif.hkl. Save the original a.hkl as a_original.hkl, save a_dif.hkl as a.hkl to use the residual hkl for searching orientations of a light-atom-only fragment. Adjust the cell content to deduct the partial model away. Remember to save a_original.hkl back as a.hkl and change back the cell content back before doing further calculations.
 
+About example datasets:
+
+There are three example datasets included:
+
+(1) JPD1249.hkl and JPD1249.res
+
+Cell content:
+
+molecule = 'S2O2C12'
+
+Z = 2
+
+(2) JPD1252.hkl and JPD1252.res
+
+Cell content:
+
+molecule = 'MoSiO4NC28'
+
+Z = 4
+
+(3) RAP119.hkl and RAP119.res
+
+Cell content:
+
+molecule = 'C78'
+
+Z = 2
+
+To try one example dataset, just copy its hkl and res files to a.hkl and a.res.
+
+
+
 Contact Xiaodong Zhang at xzhang2@tulane.edu for further assistance.
 
