@@ -57,7 +57,7 @@ and change orientation filename in this line:
 
 orientation_file='orientations_benzene.txt'
 
-Now run s_rap119.py with fast=3 once, and run with fast=4 once. To this point, the orientations of benzene rings are saved in orientation_benzene.txt file. 
+Now run s_rap119.py with fast=3. To this point, the orientations of benzene rings are saved in orientation_benzene.txt file. 
 
 To add two benzene rings with orientations 0 and 1 to the current partial model, edit these lines in s_rap119.py as:
 
