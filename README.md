@@ -207,5 +207,5 @@ To try one example dataset, just copy its hkl and res files to a.hkl and a.res.
 
 
 
-Contact Xiaodong Zhang at xzhang2@tulane.edu for further assistance.
+Please contact Xiaodong Zhang at xzhang2@tulane.edu for further assistance.
 
