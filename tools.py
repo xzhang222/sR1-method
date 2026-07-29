@@ -503,6 +503,16 @@ def make_fragment_from_mol2(name):
             fragment.append((atom,'1',x,y,z))
     return (fragment,1) 
 
+def make_Mo3():
+    # 3-fold rotation axis along x-axis
+    n_fold=3
+    r=2.75/sqrt(3)
+    fragment=[]
+    for i in range(3):
+        th=i*120.0
+        y,z=xy(r,th)
+        fragment.append(('Mo','1',0.0,y,z))
+    return (fragment,n_fold)
 
 def make_benzene():
     # 6-fold rotation axis along x-axis
@@ -798,6 +808,27 @@ def make_PF6():
     PF6.append(('F','6',0.0,0.0,-r))
     return (PF6,n_fold) 
 
+def make_S2OC():
+    n_fold=1
+    fragment=[('C','1',0.0,0.0,0.0)]
+    fragment.append(('S','1',1.64,0.0,0.0))
+    x,y=xy(1.76,124.6)
+    fragment.append(('S','1',x,y,0.0))
+    x,y=xy(1.32,-120)
+    fragment.append(('O','1',x,y,0.0))
+    return (fragment,n_fold)
+
+def make_atom(atom,r):
+    return ([(atom,'1',r,0.0,0.0)],1)
+
+def make_oSCO():
+    n_fold=1
+    fragment=[]
+    fragment.append(('C','1',1.637,0.0,0.0))
+    x,y=xy(1.325,180-127.44)
+    fragment.append(('O','1',1.637+x,y,0.0))
+    return (fragment,n_fold)
+
 def xy(r,th):
     # th in degrees
     th=radians(th)
@@ -838,6 +869,24 @@ def add_fragment(p,psi,phi,ita,D,fragment0):
         atom,label,x,y,z=fragment0[i]
         x,y,z=benzene3[i]
         atom_list.append((atom,label,x,y,z))
+    return atom_list
+
+
+def add_linear(p,theta,phi,D,fragment0):
+    # fragment0: atom, label, r,0,0
+    # p in cell coordinate
+    # angles in degrees
+    # D to convert cartesian to cell coord
+    k=3.14159265/180  
+    theta*=k  
+    phi*=k  
+    x0,y0,z0=p 
+    atom_list=[]
+    for atom,label,r,y,z in fragment0:
+        rp=r*numpy.sin(theta)
+        x,y,z=rp*numpy.cos(phi),rp*numpy.sin(phi),r*numpy.cos(theta)
+        x,y,z=to_cell(numpy.array([x,y,z]),D)
+        atom_list.append((atom,label,x0+x,y0+y,z0+z))
     return atom_list
 
 
@@ -2321,8 +2370,6 @@ def find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list0,
 
     peaks.sort(key = lambda s:-s[3])
     n = len(peaks)
-    #n_cut=n
-    #n_cut=min(1000,n)
     n_cut=min(max_orientations,n)
     print("n peaks = ", n, "n_cut = ", n_cut)
     with open('history.txt','a') as f:
@@ -2372,7 +2419,7 @@ def find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list0,
     ax=figure.add_subplot(111)
     ax.plot(x_data,y_data,'-o')
     #plt.show()
-    plt.pause(10)
+    plt.pause(1)
     plt.close()
 
     # save peaks
@@ -2994,7 +3041,7 @@ def locate_one_fragment(h,k,l,Fo,A,molecule,Z,fragment0,atom_list,
     while n1<n:
         n1,n2=n1+1,n2+1
         peaks=peaks_all[n1:n2]
-        n_refine=8
+        n_refine=3
         print('refine peaks...')
         for i in range(len(peaks)):
             sx0,sy0,sz0 = 1/na,1/nb,1/nc 
@@ -3322,6 +3369,622 @@ def get_peaks15(XX,Y,Z0,dF,h,k,l,phi,na,nb,nc):
                 z,ff=Zs3[i],Rs3[i]
                 peaks.append((x,y,z,ff)) 
     return peaks 
+
+
+
+#linear
+
+
+def find_linear_orientations(h,k,l,Fo,A,molecule,Z,fragment0,p0,
+    atom_list0=[],orientation_file='orientations_linear',
+    max_orientations=10,s_angle=5.0,starttime=None,
+    runs='find linear orientations'):
+
+    if starttime is None: starttime = time.time()
+    previoustime = starttime
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('find linear fragment orientations...',tt)
+
+    F2=Fo**2
+
+    a,b,c = abc(A)
+
+    sl = get_sl(h,k,l,A)
+
+    # the whole expected molecule:
+    content=get_content(molecule,Z)
+    heavy_atom,heavy_label=atoms_labels_from_content(content)
+    Nheavy=len(heavy_atom)
+
+    # all atomic scattering factors
+    f2a = {}
+    for atom in heavy_atom:
+        if atom not in f2a:
+            f2a[atom] = numpy.array([fsc(s,atom) for s in sl]) 
+    f2S = numpy.array([f2a[heavy_atom[i]]  for i in range(Nheavy)])
+
+    # calculate full correction
+    for i in range(len(f2S)):
+        if i == 0:
+            fcorrection = f2S[i]**2
+        else:
+            fcorrection += f2S[i]**2
+
+    # adjust correction for the fragment
+    for i in range(len(fragment0)):
+        fcorrection-=f2a[fragment0[i][0]]**2
+    for i in range(len(atom_list0)):
+        fcorrection-=f2a[atom_list0[i][0]]**2
+
+    Fosum=Fo.sum()
+
+    Ntotal=len(heavy_atom)
+
+    atomj,atom_labels,solution=atomj_solution(atom_list0+fragment0)
+
+    fj_tmp =numpy.array([f2a[atom] for atom in atomj])
+    fj=fj_tmp.T
+
+    C,D=getCD(A)
+
+    def rou13_L(x,y,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0):
+        fragment=atom_list0+add_linear(p0,x,y,D,fragment0) # x=theta,y=phi in degrees
+
+        xj = numpy.array([s[2] for s in fragment])
+        yj = numpy.array([s[3] for s in fragment])
+        zj = numpy.array([s[4] for s in fragment])
+
+        Ahj = (fj * numpy.sin(6.283185306*(h[:,numpy.newaxis]*xj[numpy.newaxis,:]+k[:,numpy.newaxis]*yj[numpy.newaxis,:]
+            +l[:,numpy.newaxis]*zj[numpy.newaxis,:])) )
+        Bhj = (fj * numpy.cos(6.283185306*(h[:,numpy.newaxis]*xj[numpy.newaxis,:]+k[:,numpy.newaxis]*yj[numpy.newaxis,:]
+            +l[:,numpy.newaxis]*zj[numpy.newaxis,:])) )
+        Ah1 =numpy.sum(Ahj ,axis=-1)
+        Bh1 =numpy.sum(Bhj ,axis=-1)
+        Fc = numpy.sqrt(Ah1**2+Bh1**2+fcorrection)
+        r1 = (abs(Fc-Fo)).sum()/Fosum
+        return -r1
+
+    runs="filtering"
+
+    s=s_angle
+    maxtheta,maxphi=180.,360.  # for non-symmetric linear molecule
+    na,nb = int(maxtheta/s),int(maxphi/s)
+    X = numpy.array([i*maxtheta/na for i in range(na)])
+    Y0 = numpy.array([i*maxphi/nb for i in range(-1,nb+1)])
+
+
+    def get_peaks2_L(XX,Y0,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,na,nb,maxtheta,p0,atom_list0):
+        peaks = []
+        for x in XX:
+            R0=numpy.array([rou13_L(x,y,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0) for y in Y0])
+            R1=R0[:nb]
+            R=R0[1:nb+1]
+            Y=Y0[1:nb+1]
+            R2=R0[2:nb+2]
+            Rs1=R[(R1<R)*(R>R2)]
+            Ys1=Y[(R1<R)*(R>R2)]
+            Rs1x1=numpy.array([rou13_L(x-maxtheta/na,y,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0) for y in Ys1])
+            Rs1x2=numpy.array([rou13_L(x+maxtheta/na,y,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0) for y in Ys1])
+            Rs2=Rs1[(Rs1x1<Rs1)*(Rs1>Rs1x2)]
+            Ys2=Ys1[(Rs1x1<Rs1)*(Rs1>Rs1x2)]
+            for i in range(len(Ys2)):
+                y,ff=Ys2[i],Rs2[i]
+                peaks.append((x,y,ff)) 
+        return peaks 
+
+    jobs=[]
+    nX=len(X)
+    dn=int(nX/ncpus)+1 
+    n1,n2=-dn,0 
+    for i in range(ncpus):
+        n1,n2=n1+dn,n2+dn 
+        jobs.append(job_server.submit(get_peaks2_L,(X[n1:n2],Y0,D,fragment0,fj,h,k,l,
+            fcorrection,Fosum,Fo,na,nb,maxtheta,p0,atom_list0),(rou13_L,add_linear,to_cell,),
+            ('numpy','math',)))
+    peaks=[]
+    for job in jobs:
+        peaks+=job()
+
+
+
+    def refine33_L(x0,y0,sx0,sy0,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0):
+        sx,sy = sx0/2,sy0/2
+        grds = {}
+        for i in range(-2,3):
+            for j in range(-2,3):
+                x,y = x0+i*sx,y0+j*sy
+                grds[(i,j)] = rou13_L(x,y,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0)
+        pks = []
+        for i in range(-1,2):
+            for j in range(-1,2):
+                if grds[(i-1,j)]<grds[(i,j)]>grds[(i+1,j)]:
+                    if grds[(i,j-1)]<grds[(i,j)]>grds[(i,j+1)]:
+                        pks.append((x0+i*sx,y0+j*sy,grds[(i,j)]))
+        if pks:
+            pks.sort(key = lambda s:-s[2])
+            return pks[0]
+        else: 
+            return (x0,y0,rou13_L(x0,y0,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0))
+
+    peaks.sort(key = lambda s:-s[2])
+    n = len(peaks)
+    n_cut=min(max_orientations,n)
+    print("n peaks = ", n, "n_cut = ", n_cut)
+    with open('history.txt','a') as f:
+        print("n peaks = ", n, "n_cut = ", n_cut,file=f)
+
+    #n_refine=6
+    peaks=peaks[:n_cut]
+    sx_0,sy_0= maxtheta/na,maxphi/nb
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('refine peaks...',time.time()-starttime,tt)
+    def refine_peaks3_L(peaks,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,sx_0,sy_0,p0,atom_list0):
+        peaks=peaks[:]
+        for i in range(len(peaks)):
+            sx0,sy0 = sx_0,sy_0 
+            for j in range(3):
+                x,y,f = peaks[i]
+                peaks[i] = refine33_L(x,y,sx0,sy0,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,p0,atom_list0)
+                sx0,sy0 = sx0/2,sy0/2
+        return peaks 
+
+    dn=int(n_cut/ncpus)+1
+    n1,n2=-dn,0 
+    jobs=[]
+    for i in range(ncpus):
+        n1,n2=n1+dn,n2+dn 
+        print(n1,n2,n_cut)
+        jobs.append(job_server.submit(refine_peaks3_L,(peaks[n1:n2],D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,
+            sx_0,sy_0,p0,atom_list0),(refine33_L,rou13_L,add_linear,to_cell,),
+            ('numpy','math',),globals=globals()))
+
+    peaks_new=[]
+    i=0
+    for job in jobs:
+        i+=1
+        peaks_new+=job()
+        tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+        print(i,ncpus,tt)
+
+    peaks_new.sort(key = lambda s:-s[2])
+    peaks=peaks_new[:]
+
+    x_data,y_data=[],[]
+    for i in range(len(peaks)):
+        x_data.append(i)
+        y_data.append(peaks[i][2])
+    from matplotlib import pyplot
+    figure=pyplot.figure(figsize=(7,7))
+    ax=figure.add_subplot(111)
+    ax.plot(x_data,y_data,'-o')
+    #plt.show()
+    plt.pause(1)
+    plt.close()
+
+    # save peaks
+    with open(orientation_file,'w') as f:
+        for x,y,ff in peaks:
+            print(x,y,ff,file=f)
+
+
+    if 1:
+        atomj0,atom_labels0,solution0=atomj_solution(atom_list0)
+        def is_good_solution10(fragment):
+            for atom,label,x,y,z in fragment:
+                p1=(x,y,z)
+                if not notnear3(p1,solution0,atomj0,A): return False
+                if trianglebonding(p1,solution0,A): return False
+            return True 
+        for x,y,ff in peaks:
+            fragment=add_linear(p0,x,y,D,fragment0) 
+            if is_good_solution10(fragment):
+                #save_history(arrange(atom_list0+fragment),runs='best orientation')
+                if 0:
+                    answer=input('good? (y/n) ')
+                    if answer=='y':
+                        tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+                        print('Found fragment orientations!',tt)
+                        return arrange(atom_list0+fragment)
+                else:
+                    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+                    print('Found fragment orientations!',tt)
+                    return atom_list0+fragment
+
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('Found linear orientations!',tt)
+    return atom_list0
+
+
+
+
+
+def is_good_solution2_L(p,theta,phi,D,fragment0,solution0,atomj0,A,the_heavy):
+    fragment=add_linear(p,theta,phi,D,fragment0) 
+    for atom,label,x,y,z in fragment:
+        p1=(x,y,z)
+        if not notnear3s(p1,solution0,atomj0,A,the_heavy): return False
+        if trianglebonding(p1,solution0,A): return False
+    return True 
+
+def rou21_L(x,y,z,theta,phi,D,fragment0,atom_list,h,k,l,fcorrection,Fo,Fosum,fj):
+    fragment=add_linear((x,y,z),theta,phi,D,fragment0) 
+    atom_list1=atom_list+fragment
+
+    xj = numpy.array([s[2] for s in atom_list1])
+    yj = numpy.array([s[3] for s in atom_list1])
+    zj = numpy.array([s[4] for s in atom_list1])
+
+    Ahj = (fj * numpy.sin(6.283185306*(h[:,numpy.newaxis]*xj[numpy.newaxis,:]+k[:,numpy.newaxis]*yj[numpy.newaxis,:]
+        +l[:,numpy.newaxis]*zj[numpy.newaxis,:])) )
+    Bhj = (fj * numpy.cos(6.283185306*(h[:,numpy.newaxis]*xj[numpy.newaxis,:]+k[:,numpy.newaxis]*yj[numpy.newaxis,:]
+        +l[:,numpy.newaxis]*zj[numpy.newaxis,:])) )
+    Ah1 =numpy.sum(Ahj ,axis=-1)
+    Bh1 =numpy.sum(Bhj ,axis=-1)
+    Fc = numpy.sqrt(abs(Ah1**2+Bh1**2+fcorrection))
+    r1 = (abs(Fc-Fo)).sum()/Fosum
+    return -r1
+
+
+
+def filtpeaks_L(peaks,theta,phi,D,fragment0,solution0,atomj0,A,the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj):
+    peaks_new=[]
+    for peak in peaks:
+        x,y,z,ff=peak
+        if is_good_solution2_L((x,y,z),theta,phi,D,fragment0,solution0,atomj0,A,the_heavy):
+            ff=rou21_L(x,y,z,theta,phi,D,fragment0,atom_list,h,k,l,fcorrection,Fo,Fosum,fj)
+            peaks_new.append((x,y,z,ff))
+    return peaks_new
+
+
+
+def locate_a_batch_of_linear_fragments(h,k,l,Fo,A,molecule,Z,fragment0,
+    starttime=None,runs='locate a batch of linear fragments'):
+
+    starttime=time.time()
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('locate a batch of linear fragments...',tt)
+    F2=Fo**2
+
+    with open('orientations_linear.txt','r') as f:
+        text=f.read()
+    lines=text.split('\n')[:-1]
+    C,D=getCD(A)
+
+    def get_orientation_L(line):
+        theta,phi,ff=line.split()
+        theta,phi,ff=float(theta),float(phi),float(ff)
+        return (theta,phi)
+
+    def get_fragment_L(line,p):
+        theta,phi=get_orientation_L(line)
+        return add_linear(p,theta,phi,D,fragment0)
+
+    start_first_fragment=0                       
+
+    if start_first_fragment:
+        # add first fragment
+        theta,phi=get_orientation_L(lines[0])
+        atom_list=add_linear((0.3,0.3,0.3),theta,phi,D,fragment0)
+    else:
+        # read known part of the structure
+        atom_list = read_atoms('a.res')
+
+    save_history(atom_list,'start',True)
+    #return
+
+    # the part of molecule already finished:
+    atomj,atom_labels,solution=atomj_solution(atom_list+fragment0)
+
+    # the part not finished yet:
+    content=get_content(molecule,Z)
+    for atom in atomj:
+        content[atom]-=1
+    print(content)
+    #return
+    atoms,labels=atoms_labels_from_content(content)
+    print(atoms)
+    print(labels)
+    #return
+
+    # the whole molecule:
+    heavy_atom=atomj+atoms 
+    heavy_label=atom_labels+labels  
+    Nheavy=len(heavy_atom)
+
+    a,b,c = abc(A)
+    s=0.4
+    na,nb,nc = int(a/s),int(b/s),int(c/s)
+    x = numpy.array([i/na for i in range(0,na)])
+    y = numpy.array([i/nb for i in range(0,nb)])
+    z = numpy.array([i/nc for i in range(0,nc)])
+    X,Y,ZZ = numpy.meshgrid(x,y,z)
+    peaks_std=[]
+    for i,x in numpy.ndenumerate(X):
+        y,z=Y[i],ZZ[i]
+        peaks_std.append((x,y,z,1.0))
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('Using all grid points!',tt)
+
+    orientations=list(range(len(lines)))[3:4]
+    for ibenzene in range(0,1):
+        peaks=peaks_std[:]
+        tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+        print('peaks found, time: ',len(peaks),time.time()-starttime,tt)
+
+        r1min,xmin,ymin,zmin,imin=1e200,0,0,0,0
+        orientation_set=list(set(orientations))
+        print(orientation_set)
+        for i in orientation_set:
+            #print('try orientation ', i)
+            theta,phi=get_orientation_L(lines[i])
+            (x,y,z)=locate_one_linear_fragment(h,k,l,Fo,A,molecule,Z,fragment0,
+                atom_list,theta,phi,peaks,starttime,
+                runs='find linear fragment locations')
+            a_l=add_linear((x,y,z),theta,phi,D,fragment0)
+            atom_list_min=atom_list+a_l
+            r1=find_sR1(h,k,l,Fo,A,molecule,Z,atom_list_min)
+            if r1<r1min:
+                r1min,xmin,ymin,zmin,imin=r1,x,y,z,i
+            tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+            print(ibenzene,i,imin,' r1=',r1,'r1min=',r1min,' time: ',time.time()-starttime,tt)
+            with open('history.txt','a') as f:
+                print('\n\n',file=f)
+                print(ibenzene,i,imin,' r1=',r1,'r1min=',r1min,' time: ',time.time()-starttime,tt,file=f)
+                ii=len(atom_list)
+                for atom,label,x,y,z in a_l:
+                    ii+=1
+                    print(atom+str(ii),label,round(x,4),round(y,4),round(z,4),'11.0 0.05',file=f)
+                print('\n\n',file=f)
+        theta,phi=get_orientation_L(lines[imin])
+        atom_list+=add_linear((xmin,ymin,zmin),theta,phi,D,fragment0)
+        save_history(atom_list,str(ibenzene),True)
+        tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+        print('finished fragment ',ibenzene,' at time ',time.time()-starttime,tt)
+    save_history(atom_list,'final',True)
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('finished, time: ',time.time()-starttime,tt)
+
+
+
+
+
+def locate_one_linear_fragment(h,k,l,Fo,A,molecule,Z,fragment0,atom_list,
+    theta,phi,peaks,starttime=None,runs='find linear fragment locations'):
+
+    if starttime is None: starttime = time.time()
+    previoustime = starttime
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('locate one linear fragment...',tt)
+
+    F2=Fo**2
+
+    a,b,c = abc(A)
+
+    #sl = get_sl(h,k,l,A)
+
+    # the whole expected molecule:
+    content=get_content(molecule,Z)
+    heavy_atom,heavy_label=atoms_labels_from_content(content)
+    Nheavy=len(heavy_atom)
+
+    # all atomic scattering factors
+    # f2a = {}
+    # for atom in heavy_atom:
+    #     if atom not in f2a:
+    #         f2a[atom] = numpy.array([fsc(s,atom) for s in sl]) 
+    f2S = numpy.array([f2a[heavy_atom[i]]  for i in range(Nheavy)])
+
+    # calculate full correction
+    for i in range(len(f2S)):
+        if i == 0:
+            fcorrection = f2S[i]**2
+        else:
+            fcorrection += f2S[i]**2
+
+    # adjust correction for the fragment and the known part
+    atom_list1=atom_list+fragment0
+    for i in range(len(atom_list1)):
+        fcorrection-=f2a[atom_list1[i][0]]**2
+    #print(fcorrection)
+
+
+    Fosum=Fo.sum()
+
+    Ntotal=len(heavy_atom)
+
+    atomj,atom_labels,solution=atomj_solution(atom_list1)
+
+    fj_tmp =numpy.array([f2a[atom] for atom in atomj])
+    fj=fj_tmp.T
+
+    C,D=getCD(A)
+
+    atomj0,atom_labels0,solution0=atomj_solution(atom_list)
+    def is_good_solution_L(p):
+        fragment=add_linear(p,theta,phi,D,fragment0) 
+        for atom,label,x,y,z in fragment:
+            p1=(x,y,z)
+            if not notnear3(p1,solution0,atomj0,A): return False
+            if trianglebonding(p1,solution0,A): return False
+        return True 
+
+    def rou_L(x,y,z):
+        fragment=add_linear((x,y,z),theta,phi,D,fragment0) 
+        atom_list1=atom_list+fragment
+
+        xj = numpy.array([s[2] for s in atom_list1])
+        yj = numpy.array([s[3] for s in atom_list1])
+        zj = numpy.array([s[4] for s in atom_list1])
+
+        Ahj = (fj * sin(tpi*(h[:,numpy.newaxis]*xj[numpy.newaxis,:]+k[:,numpy.newaxis]*yj[numpy.newaxis,:]
+            +l[:,numpy.newaxis]*zj[numpy.newaxis,:])) )
+        Bhj = (fj * cos(tpi*(h[:,numpy.newaxis]*xj[numpy.newaxis,:]+k[:,numpy.newaxis]*yj[numpy.newaxis,:]
+            +l[:,numpy.newaxis]*zj[numpy.newaxis,:])) )
+        Ah1 =numpy.sum(Ahj ,axis=-1)
+        Bh1 =numpy.sum(Bhj ,axis=-1)
+        Fc = sqrt(abs(Ah1**2+Bh1**2+fcorrection))
+        r1 = (abs(Fc-Fo)).sum()/Fosum
+        return -r1
+
+    runs="filtering"
+
+    s=0.4
+    na,nb,nc = int(a/s),int(b/s),int(c/s)
+
+
+    n=len(peaks)
+    dn=int(n/ncpus)+1
+    n1,n2,jobs=-dn,0,[]
+    for i in range(ncpus):
+        n1,n2=n1+dn,n2+dn 
+        jobs.append(job_server.submit(filtpeaks_L,(peaks[n1:n2],theta,phi,D,fragment0,solution0,atomj0,A,
+            the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj),
+            (is_good_solution2_L,rou21_L,add_linear,notnear3s,trianglebonding,dis,d_min3,correct,dis_exact,
+                to_cell),
+            ('numpy','math')))
+
+    peaks_new=[]
+    for job in jobs:
+        peaks_new+=job()  
+    peaks=peaks_new[:] 
+
+
+    def refine3_L(x0,y0,z0,sx0,sy0,sz0):
+        sx,sy,sz = sx0/2,sy0/2,sz0/2
+        grds = {}
+        for i in range(-2,3):
+            for j in range(-2,3):
+                for kk in range(-2,3):
+                    x,y,z = x0+i*sx,y0+j*sy,z0+kk*sz 
+                    grds[(i,j,kk)] = rou_L(x,y,z)
+        pks = []
+        for i in range(-1,2):
+            for j in range(-1,2):
+                for kk in range(-1,2):
+                    if grds[(i-1,j,kk)]<grds[(i,j,kk)]>grds[(i+1,j,kk)]:
+                        if grds[(i,j-1,kk)]<grds[(i,j,kk)]>grds[(i,j+1,kk)]:
+                            if grds[(i,j,kk-1)]<grds[(i,j,kk)]>grds[(i,j,kk+1)]:
+                                pks.append((x0+i*sx,y0+j*sy,z0+kk*sz,grds[(i,j,kk)]))
+        if pks:
+            pks.sort(key = lambda s:-s[3])
+            return pks[0]
+        else: 
+            return (x0,y0,z0,rou_L(x0,y0,z0))
+
+    peaks.sort(key = lambda s:-s[3])
+    n = len(peaks)
+    print('npeaks = ', n)
+    peaks_all=peaks[:]
+    n1,n2=-1,0 
+    while n1<n:
+        n1,n2=n1+1,n2+1
+        peaks=peaks_all[n1:n2]
+        n_refine=8
+        print('refine peaks...')
+        for i in range(len(peaks)):
+            sx0,sy0,sz0 = 1/na,1/nb,1/nc 
+            for j in range(n_refine):
+                x,y,z,f = peaks[i]
+                peaks[i] = refine3_L(x,y,z,sx0,sy0,sz0)
+                sx0,sy0,sz0 = sx0/2,sy0/2,sz0/2 
+            tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+            print(runs,i,int(time.time()-starttime),-peaks[i][3],tt)
+        peaks.sort(key = lambda s:-s[3])
+        for x,y,z,ff in peaks:
+            if is_good_solution_L((x,y,z)): 
+                tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+                print('Found one fragment!',tt)
+                return (x,y,z)
+
+    tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+    print('Unable to find one fragment!',tt)
+    return (x,y,z) 
+
+
+
+
+
+
+
+
+
+def rou15(x,y,z,dF,h,k,l,phi):
+    return (dF *numpy.cos(6.283185306 * (h*x+k*y+l*z-phi))).sum()
+
+def rou25(x,y,z,dF,h,k,l,phi):
+    return dF *numpy.cos(6.283185306 * (h*x+k*y+l*z-phi))
+
+def refine35(x0,y0,z0,sx0,sy0,sz0,dF,h,k,l,phi):
+    sx,sy,sz = sx0/2,sy0/2,sz0/2
+    grds = {}
+    for i in range(-2,3):
+        for j in range(-2,3):
+            for kk in range(-2,3):
+                x,y,z = x0+i*sx,y0+j*sy,z0+kk*sz 
+                grds[(i,j,kk)] = rou15(x,y,z,dF,h,k,l,phi)
+    pks = []
+    for i in range(-1,2):
+        for j in range(-1,2):
+            for kk in range(-1,2):
+                if grds[(i-1,j,kk)]<grds[(i,j,kk)]>grds[(i+1,j,kk)]:
+                    if grds[(i,j-1,kk)]<grds[(i,j,kk)]>grds[(i,j+1,kk)]:
+                        if grds[(i,j,kk-1)]<grds[(i,j,kk)]>grds[(i,j,kk+1)]:
+                            pks.append((x0+i*sx,y0+j*sy,z0+kk*sz,grds[(i,j,kk)]))
+    if pks:
+        pks.sort(key = lambda s:-s[3])
+        return pks[0]
+    else: 
+        return (x0,y0,z0,rou15(x0,y0,z0,dF,h,k,l,phi))
+
+def refine_peaks25(peaks,dF,h,k,l,phi,na,nb,nc):
+    peaks=peaks[:]
+    for i in range(len(peaks)):
+        sx0,sy0,sz0 = 1/na,1/nb,1/nc 
+        for j in range(5):
+            x,y,z,f = peaks[i]
+            peaks[i] = refine35(x,y,z,sx0,sy0,sz0,dF,h,k,l,phi)
+            sx0,sy0,sz0 = sx0/2,sy0/2,sz0/2 
+    return peaks 
+
+
+
+def get_peaks15(XX,Y,Z0,dF,h,k,l,phi,na,nb,nc):
+    peaks = []
+    for x in XX:
+        for y in Y:
+            R0=numpy.sum(rou25((x*numpy.ones_like(Z0))[:,numpy.newaxis],
+                (y*numpy.ones_like(Z0))[:,numpy.newaxis],Z0[:,numpy.newaxis],
+                dF,h,k,l,phi),axis=-1)
+            R1=R0[:nc]
+            R=R0[1:nc+1]
+            Z=Z0[1:nc+1]
+            R2=R0[2:nc+2]
+            Rs1=R[(R1<R) * (R>R2)]
+            Zs1=Z[(R1<R) * (R>R2)]
+            Rs1x1=numpy.sum(rou25(((x-1/na)*numpy.ones_like(Zs1))[:,numpy.newaxis],
+                (y*numpy.ones_like(Zs1))[:,numpy.newaxis],Zs1[:,numpy.newaxis], 
+                dF,h,k,l,phi),axis=-1)
+            Rs1x2=numpy.sum(rou25(((x+1/na)*numpy.ones_like(Zs1))[:,numpy.newaxis],
+                (y*numpy.ones_like(Zs1))[:,numpy.newaxis],Zs1[:,numpy.newaxis], 
+                dF,h,k,l,phi),axis=-1)
+            Rs2=Rs1[(Rs1x1<Rs1) * (Rs1>Rs1x2)]
+            Zs2=Zs1[(Rs1x1<Rs1) * (Rs1>Rs1x2)]
+            Rs2y1=numpy.sum(rou25((x*numpy.ones_like(Zs2))[:,numpy.newaxis],
+                ((y-1/nb)*numpy.ones_like(Zs2))[:,numpy.newaxis],Zs2[:,numpy.newaxis], 
+                dF,h,k,l,phi),axis=-1)
+            Rs2y2=numpy.sum(rou25((x*numpy.ones_like(Zs2))[:,numpy.newaxis],
+                ((y+1/nb)*numpy.ones_like(Zs2))[:,numpy.newaxis],Zs2[:,numpy.newaxis],
+                dF,h,k,l,phi),axis=-1)
+            Rs3=Rs2[(Rs2y1<Rs2) * (Rs2>Rs2y2)]
+            Zs3=Zs2[(Rs2y1<Rs2) * (Rs2>Rs2y2)]
+            for i in range(len(Zs3)):
+                z,ff=Zs3[i],Rs3[i]
+                peaks.append((x,y,z,ff)) 
+    return peaks 
+
+
+
+
 
 
 # find corrected-peaks - using electron density and FFT
@@ -3885,7 +4548,7 @@ def pairing2(correct_res='correct.res',res='a.res', s=0.5):
     A = matrix_A(correct_res)
 
     if 0:
-        N_best_match,best_overlap=158,(0,0)
+        N_best_match,best_overlap=171,(0,2)
     else:
         best_overlap,N_best_match=None,0
         i_current=0
@@ -4770,9 +5433,10 @@ def get_structure_solution(res_file,hkl_file,molecule,Z,starttime,fast=0,
     if fast==2:
         # sR1 method
         atom_list = read_atoms('a.res') 
+        if not atom_list: print('problem in reading a.res')
         if len(atom_list)==1:
             atom,label,x,y,z=atom_list[0]
-            #x,y,z=random(),random(),random()
+            x,y,z=random(),random(),random()
             atom_list[0]=(atom,label,x,y,z)
         if steps[-1] is None:
             steps=steps[:-1]
@@ -4798,7 +5462,7 @@ def get_structure_solution(res_file,hkl_file,molecule,Z,starttime,fast=0,
                 else:
                     s_keep.append(solution_keep[i])
         if 1:
-            #atom_list=relax_model(atom_list,f2a,h,k,l,Fo,Fosum,A,content,starttime)
+            atom_list=relax_model(atom_list,f2a,h,k,l,Fo,Fosum,A,content,starttime)
             idx=[]
             for i in range(len(s_keep)):
                 idx.append((i,s_keep[i]))
@@ -5025,14 +5689,13 @@ def get_structure_solution(res_file,hkl_file,molecule,Z,starttime,fast=0,
             j=7
             atom,label,x,y,z=atom_list0[j-1]
             p0=(x,y,z) 
-        find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list0,
+        atom_list=find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list0,
             fragment0,n_fold,p0,orientation_file,
             max_orientations=max_orientations,s_angle=s_angle,
             starttime=starttime,runs='find fragment orientations')
         tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
         print('Total time: ',time.time()-starttime,tt)
-        atom_list1=read_atoms('a.res')
-        r11=get_sR1(atom_list1,h,k,l,f2a,sl,Fo,Fosum,content)
+        r11=get_sR1(atom_list,h,k,l,f2a,sl,Fo,Fosum,content)
         print('r1 = ',r11)
         with open('history.txt','a') as f:
             print('r1 = ',r11,file=f)
@@ -5089,9 +5752,8 @@ def get_structure_solution(res_file,hkl_file,molecule,Z,starttime,fast=0,
 
     if fast==56: # completing model: origin known, 
                  # searching orientation
-        for i in [9]:
+        for i in [1]:
             atom_list=read_atoms('a.res')
-            #save_history(atom_list,'starting model',True)
 
             atoms,labels,s=atomj_solution(atom_list)
             s=[numpy.array(p) for p in s]
@@ -5100,11 +5762,30 @@ def get_structure_solution(res_file,hkl_file,molecule,Z,starttime,fast=0,
                 fragment0,n_fold,p,orientation_file,
                 max_orientations=max_orientations,s_angle=s_angle,
                 starttime=starttime,runs='find fragment orientations')
-            #atom_list=relax_model(atom_list,f2a,h,k,l,Fo,Fosum,A,content,starttime)
-            #save_history(arrange(atom_list),'final model',True)
             r11=get_sR1(atom_list,h,k,l,f2a,sl,Fo,Fosum,content)
             save_history(atom_list,'sR1 = '+str(r11),True)
             print('sR1 = '+str(r11))
+
+
+    if fast==560: # completing model: origin known, 
+                 # searching linear orientation
+        for atom,i,d,dd in cases:
+            fragment0,n_fold=make_atom(atom,d)
+            atom_list=read_atoms('a.res')
+
+            atoms,labels,s=atomj_solution(atom_list)
+            s=[numpy.array(p) for p in s]
+            p=s[i-1]
+            atom_list=find_linear_orientations(h,k,l,Fo,A,molecule,Z,
+                fragment0,p,atom_list,orientation_file,
+                max_orientations=max_orientations,s_angle=s_angle,
+                starttime=starttime,runs='find linear orientations')
+            r11=get_sR1(atom_list,h,k,l,f2a,sl,Fo,Fosum,content)
+            save_history(atom_list,'sR1 = '+str(r11),True)
+            print('sR1 = '+str(r11))
+
+
+
 
     if fast==57: # completing model: origin known, searching orientation
                  # comparing inverted model
