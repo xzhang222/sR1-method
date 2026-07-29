@@ -19,13 +19,13 @@ if 0:
     save_history(atom_list,runs='current model')   
 
 if 0:
+    invert_model(res='a.res')
+
+if 0:
     re_arrange() 
 
 if 0:
     pairing2(correct_res='correct.res',res='a.res', s=0.5)
-
-if 0:
-    invert_model(res='a.res')
 
 if 0: # molecular model
     atom_list=read_atoms('a.res')
