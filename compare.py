@@ -19,10 +19,10 @@ if 0:
     save_history(atom_list,runs='current model')   
 
 if 0:
-    invert_model(res='a.res')
+    re_arrange() 
 
 if 0:
-    re_arrange() 
+    invert_model(res='a.res')
 
 if 0:
     pairing2(correct_res='correct.res',res='a.res', s=0.5)
@@ -33,7 +33,7 @@ if 0: # molecular model
     atoms,labels,s=atomj_solution(atom_list)
     for i in range(len(s)):
         s[i]=numpy.array(s[i])
-    p1,p2,p3=s[0],s[6],s[1]
+    p1,p2,p3=s[0],s[1],s[2]
     #p3=numpy.array([0.3,0.3,0.3])
     A = matrix_A('a.res')
     xp,yp,zp=local_xpypzp(p1,p2,p3,A)
@@ -43,7 +43,7 @@ if 0: # molecular model
     for i in range(len(s)):
         x,y,z=s[i]
         atom_list.append((atoms[i],labels[i],x,y,z))
-    with open('MoO4SiC16_i.txt','w') as f:
+    with open('NiS2O2N2C26.txt','w') as f:
         for a,l,x,y,z in atom_list:
             print(a,l,x,y,z,file=f)
             #print(a,l,-x,-y,-z,file=f)
