@@ -1922,7 +1922,91 @@ def globalmin_using_dips(h,k,l,Fo,A,molecule,Z,ntotal,atom_list,
     print('Finished one batch of sR1 calculations!',tt,r1_best)
     return (atom_list,r1_best,solution_keep)
 
+def rou12(x,y,z,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection):
+    angle = 6.283185306*(h*x+k*y+l*z)
+    Ahj = f2 * numpy.sin(angle) 
+    Bhj = f2 * numpy.cos(angle) 
+    Ah =Ah1 + Ahj
+    Bh =Bh1 + Bhj 
+    Fc = numpy.sqrt(Ah**2+Bh**2+fcorrection)
+    r1 = (abs(Fc-Fo)).sum()/Fosum
+    return -r1
 
+def rou22(x,y,z,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection):
+    angle = 6.283185306*(h*x+k*y+l*z)
+    Ahj = f2 * numpy.sin(angle) 
+    Bhj = f2 * numpy.cos(angle) 
+    Ah =Ah1 + Ahj
+    Bh =Bh1 + Bhj 
+    Fc = numpy.sqrt(Ah**2+Bh**2+fcorrection)
+    r1 = abs(Fc-Fo)/Fosum
+    return -r1
+
+def get_peaks1(XX,Y,Z0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc):
+    peaks = []
+    for x in XX:
+        for y in Y:
+            R0=numpy.sum(rou22((x*numpy.ones_like(Z0))[:,numpy.newaxis],
+                (y*numpy.ones_like(Z0))[:,numpy.newaxis],Z0[:,numpy.newaxis],
+                h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
+            R1=R0[:nc]
+            R=R0[1:nc+1]
+            Z=Z0[1:nc+1]
+            R2=R0[2:nc+2]
+            Rs1=R[(R1<R) * (R>R2)]
+            Zs1=Z[(R1<R) * (R>R2)]
+            Rs1x1=numpy.sum(rou22(((x-1/na)*numpy.ones_like(Zs1))[:,numpy.newaxis],
+                (y*numpy.ones_like(Zs1))[:,numpy.newaxis],Zs1[:,numpy.newaxis], 
+                h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
+            Rs1x2=numpy.sum(rou22(((x+1/na)*numpy.ones_like(Zs1))[:,numpy.newaxis],
+                (y*numpy.ones_like(Zs1))[:,numpy.newaxis],Zs1[:,numpy.newaxis], 
+                h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
+            Rs2=Rs1[(Rs1x1<Rs1) * (Rs1>Rs1x2)]
+            Zs2=Zs1[(Rs1x1<Rs1) * (Rs1>Rs1x2)]
+            Rs2y1=numpy.sum(rou22((x*numpy.ones_like(Zs2))[:,numpy.newaxis],
+                ((y-1/nb)*numpy.ones_like(Zs2))[:,numpy.newaxis],Zs2[:,numpy.newaxis], 
+                h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
+            Rs2y2=numpy.sum(rou22((x*numpy.ones_like(Zs2))[:,numpy.newaxis],
+                ((y+1/nb)*numpy.ones_like(Zs2))[:,numpy.newaxis],Zs2[:,numpy.newaxis],
+                h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
+            Rs3=Rs2[(Rs2y1<Rs2) * (Rs2>Rs2y2)]
+            Zs3=Zs2[(Rs2y1<Rs2) * (Rs2>Rs2y2)]
+            for i in range(len(Zs3)):
+                z,ff=Zs3[i],Rs3[i]
+                peaks.append((x,y,z,ff)) 
+    return peaks 
+
+def refine32(x0,y0,z0,sx0,sy0,sz0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection):
+    sx,sy,sz = sx0/2,sy0/2,sz0/2
+    grds = {}
+    for i in range(-2,3):
+        for j in range(-2,3):
+            for kk in range(-2,3):
+                x,y,z = x0+i*sx,y0+j*sy,z0+kk*sz 
+                grds[(i,j,kk)] = rou12(x,y,z,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection)
+    pks = []
+    for i in range(-1,2):
+        for j in range(-1,2):
+            for kk in range(-1,2):
+                if grds[(i-1,j,kk)]<grds[(i,j,kk)]>grds[(i+1,j,kk)]:
+                    if grds[(i,j-1,kk)]<grds[(i,j,kk)]>grds[(i,j+1,kk)]:
+                        if grds[(i,j,kk-1)]<grds[(i,j,kk)]>grds[(i,j,kk+1)]:
+                            pks.append((x0+i*sx,y0+j*sy,z0+kk*sz,grds[(i,j,kk)]))
+    if pks:
+        pks.sort(key = lambda s:-s[3])
+        return pks[0]
+    else: 
+        return (x0,y0,z0,rou12(x0,y0,z0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection))
+    
+def refine_peaks2(peaks,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc):
+    peaks=peaks[:]
+    for i in range(len(peaks)):
+        sx0,sy0,sz0 = 1/na,1/nb,1/nc 
+        for j in range(1):  # was 6
+            x,y,z,f = peaks[i]
+            peaks[i] = refine32(x,y,z,sx0,sy0,sz0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection)
+            sx0,sy0,sz0 = sx0/2,sy0/2,sz0/2 
+    return peaks 
 
 def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
     # locate all sR1 holes 
@@ -2045,27 +2129,6 @@ def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
     Ah1 =numpy.sum(Ahj ,axis=-1)
     Bh1 =numpy.sum(Bhj ,axis=-1)
 
-    def rou12(x,y,z,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection):
-        angle = 6.283185306*(h*x+k*y+l*z)
-        Ahj = f2 * numpy.sin(angle) 
-        Bhj = f2 * numpy.cos(angle) 
-        Ah =Ah1 + Ahj
-        Bh =Bh1 + Bhj 
-        Fc = numpy.sqrt(Ah**2+Bh**2+fcorrection)
-        r1 = (abs(Fc-Fo)).sum()/Fosum
-        return -r1
-
-
-    def rou22(x,y,z,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection):
-        angle = 6.283185306*(h*x+k*y+l*z)
-        Ahj = f2 * numpy.sin(angle) 
-        Bhj = f2 * numpy.cos(angle) 
-        Ah =Ah1 + Ahj
-        Bh =Bh1 + Bhj 
-        Fc = numpy.sqrt(Ah**2+Bh**2+fcorrection)
-        r1 = abs(Fc-Fo)/Fosum
-        return -r1
-
 
     runs="refining"
 
@@ -2096,40 +2159,6 @@ def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
                 Z0 = numpy.array([i/Nc for i in range(-1,int(Nc/2)+1)])
                 nc=int(Nc/2) 
 
-
-    def get_peaks1(XX,Y,Z0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc):
-        peaks = []
-        for x in XX:
-            for y in Y:
-                R0=numpy.sum(rou22((x*numpy.ones_like(Z0))[:,numpy.newaxis],
-                    (y*numpy.ones_like(Z0))[:,numpy.newaxis],Z0[:,numpy.newaxis],
-                    h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
-                R1=R0[:nc]
-                R=R0[1:nc+1]
-                Z=Z0[1:nc+1]
-                R2=R0[2:nc+2]
-                Rs1=R[(R1<R) * (R>R2)]
-                Zs1=Z[(R1<R) * (R>R2)]
-                Rs1x1=numpy.sum(rou22(((x-1/na)*numpy.ones_like(Zs1))[:,numpy.newaxis],
-                    (y*numpy.ones_like(Zs1))[:,numpy.newaxis],Zs1[:,numpy.newaxis], 
-                    h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
-                Rs1x2=numpy.sum(rou22(((x+1/na)*numpy.ones_like(Zs1))[:,numpy.newaxis],
-                    (y*numpy.ones_like(Zs1))[:,numpy.newaxis],Zs1[:,numpy.newaxis], 
-                    h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
-                Rs2=Rs1[(Rs1x1<Rs1) * (Rs1>Rs1x2)]
-                Zs2=Zs1[(Rs1x1<Rs1) * (Rs1>Rs1x2)]
-                Rs2y1=numpy.sum(rou22((x*numpy.ones_like(Zs2))[:,numpy.newaxis],
-                    ((y-1/nb)*numpy.ones_like(Zs2))[:,numpy.newaxis],Zs2[:,numpy.newaxis], 
-                    h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
-                Rs2y2=numpy.sum(rou22((x*numpy.ones_like(Zs2))[:,numpy.newaxis],
-                    ((y+1/nb)*numpy.ones_like(Zs2))[:,numpy.newaxis],Zs2[:,numpy.newaxis],
-                    h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection),axis=-1)
-                Rs3=Rs2[(Rs2y1<Rs2) * (Rs2>Rs2y2)]
-                Zs3=Zs2[(Rs2y1<Rs2) * (Rs2>Rs2y2)]
-                for i in range(len(Zs3)):
-                    z,ff=Zs3[i],Rs3[i]
-                    peaks.append((x,y,z,ff)) 
-        return peaks 
 
     if SIN is None:
         jobs=[]
@@ -2163,28 +2192,6 @@ def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
             peaks.append((xp[i],yp[i],zp[i],r1p[i]))
     nc=Nc 
 
-    def refine32(x0,y0,z0,sx0,sy0,sz0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection):
-        sx,sy,sz = sx0/2,sy0/2,sz0/2
-        grds = {}
-        for i in range(-2,3):
-            for j in range(-2,3):
-                for kk in range(-2,3):
-                    x,y,z = x0+i*sx,y0+j*sy,z0+kk*sz 
-                    grds[(i,j,kk)] = rou12(x,y,z,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection)
-        pks = []
-        for i in range(-1,2):
-            for j in range(-1,2):
-                for kk in range(-1,2):
-                    if grds[(i-1,j,kk)]<grds[(i,j,kk)]>grds[(i+1,j,kk)]:
-                        if grds[(i,j-1,kk)]<grds[(i,j,kk)]>grds[(i,j+1,kk)]:
-                            if grds[(i,j,kk-1)]<grds[(i,j,kk)]>grds[(i,j,kk+1)]:
-                                pks.append((x0+i*sx,y0+j*sy,z0+kk*sz,grds[(i,j,kk)]))
-        if pks:
-            pks.sort(key = lambda s:-s[3])
-            return pks[0]
-        else: 
-            return (x0,y0,z0,rou12(x0,y0,z0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection))
-
     peaks.sort(key = lambda s:-s[3])
     n = len(peaks)
     n_cut=5*Ntotal  # used to be 5
@@ -2196,15 +2203,6 @@ def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
     peaks=peaks[:n_cut]
     tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
     print('refine peaks... ', time.time()-starttime,tt)
-    def refine_peaks2(peaks,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc):
-        peaks=peaks[:]
-        for i in range(len(peaks)):
-            sx0,sy0,sz0 = 1/na,1/nb,1/nc 
-            for j in range(1):  # was 6
-                x,y,z,f = peaks[i]
-                peaks[i] = refine32(x,y,z,sx0,sy0,sz0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection)
-                sx0,sy0,sz0 = sx0/2,sy0/2,sz0/2 
-        return peaks 
 
     dn=int(n_cut/ncpus)+1
     n1,n2=-dn,0 
