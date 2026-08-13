@@ -2161,18 +2161,21 @@ def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
 
 
     if SIN is None:
-        jobs=[]
-        nX=len(X)
-        dn=int(nX/ncpus)+1 
-        n1,n2=-dn,0 
-        for i in range(ncpus):
-            n1,n2=n1+dn,n2+dn 
-            jobs.append(job_server.submit(get_peaks1,(X[n1:n2],Y,Z0,h,k,l,f2,Ah1,Bh1,
-                Fosum,Fo,fcorrection,na,nb,nc),
-                (rou22,),('numpy','math',)))
-        peaks=[]
-        for job in jobs:
-            peaks+=job()
+        try:
+            jobs=[]
+            nX=len(X)
+            dn=int(nX/ncpus)+1 
+            n1,n2=-dn,0 
+            for i in range(ncpus):
+                n1,n2=n1+dn,n2+dn 
+                jobs.append(job_server.submit(get_peaks1,(X[n1:n2],Y,Z0,h,k,l,f2,Ah1,Bh1,
+                    Fosum,Fo,fcorrection,na,nb,nc),
+                    (rou22,),('numpy','math',)))
+            peaks=[]
+            for job in jobs:
+                peaks+=job()
+        except:
+            peaks=get_peaks1(X,Y,Z0,h,k,l,f2,Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc)
     else:
         Ahj = f2[numpy.newaxis,numpy.newaxis,numpy.newaxis,:] * SIN
         Bhj = f2[numpy.newaxis,numpy.newaxis,numpy.newaxis,:] * COS 
