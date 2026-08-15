@@ -13,8 +13,12 @@ from elements3 import elements
 from scipy.fft import fftn, ifftn 
 import pp  # this module is available from parallelpython.com
 
-job_server = pp.Server(ppservers=())
-ncpus = job_server.get_ncpus()
+try:
+    job_server = pp.Server(ppservers=())
+    ncpus = job_server.get_ncpus()
+except:
+    job_server=None 
+    ncpus=5 
 
 label_dic={}
 try:
@@ -1820,20 +1824,24 @@ def globalmin_using_dips(h,k,l,Fo,A,molecule,Z,ntotal,atom_list,
         fcorrection -= f2**2
 
         if 1:
-            Ntot=len(X)
-            Ncut=int(Ntot/ncpus)+1
-            N1,N2,jobs=0,Ncut,[] 
-            while N1<Ntot:
-                jobs.append(job_server.submit(get_min,(X[N1:N2],Y[N1:N2],Z[N1:N2],
-                    h,k,l,f2,fcorrection,Ah1,Bh1,Fo,Fosum,),(r1_func,),('numpy',)))
-                N1,N2=N1+Ncut,N2+Ncut 
+            try:
+                Ntot=len(X)
+                Ncut=int(Ntot/ncpus)+1
+                N1,N2,jobs=0,Ncut,[] 
+                while N1<Ntot:
+                    jobs.append(job_server.submit(get_min,(X[N1:N2],Y[N1:N2],Z[N1:N2],
+                        h,k,l,f2,fcorrection,Ah1,Bh1,Fo,Fosum,),(r1_func,),('numpy',)))
+                    N1,N2=N1+Ncut,N2+Ncut 
 
-            r1min,p_found=1e100,None  
-            for job in jobs:
-                r1,p=job()
-                if r1<r1min:
-                    r1min=r1 
-                    p_found=p 
+                r1min,p_found=1e100,None  
+                for job in jobs:
+                    r1,p=job()
+                    if r1<r1min:
+                        r1min=r1 
+                        p_found=p 
+            except:
+                r1min,p_found=get_min(X,Y,Z,
+                        h,k,l,f2,fcorrection,Ah1,Bh1,Fo,Fosum)
         else:
             p_found=(X[0],Y[0],Z[0])
 
@@ -2207,18 +2215,22 @@ def filter(h,k,l,F2,A,heavy_atom,atom_list,starttime,more_info=None):
     tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
     print('refine peaks... ', time.time()-starttime,tt)
 
-    dn=int(n_cut/ncpus)+1
-    n1,n2=-dn,0 
-    jobs=[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(refine_peaks2,(peaks[n1:n2],h,k,l,f2,
-            Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc),(refine32,rou12,),
-            ('numpy',),globals=globals()))
+    try:
+        dn=int(n_cut/ncpus)+1
+        n1,n2=-dn,0 
+        jobs=[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(refine_peaks2,(peaks[n1:n2],h,k,l,f2,
+                Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc),(refine32,rou12,),
+                ('numpy',),globals=globals()))
 
-    peaks_new=[]
-    for job in jobs:
-        peaks_new+=job()
+        peaks_new=[]
+        for job in jobs:
+            peaks_new+=job()
+    except:
+        peaks_new=refine_peaks2(peaks,h,k,l,f2,
+                Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc)
 
     peaks_new.sort(key = lambda s:-s[3])
     tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
@@ -2332,18 +2344,22 @@ def find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list0,
                     peaks.append((x,y,z,ff)) 
         return peaks 
 
-    jobs=[]
-    nX=len(X)
-    dn=int(nX/ncpus)+1 
-    n1,n2=-dn,0 
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(get_peaks2,(X[n1:n2],Y,Z0,D,atom_list0,fragment0,p0,fj,h,k,l,
-            fcorrection,Fosum,Fo,na,nb,nc,maxpsi,maxphi),(rou13,add_fragment,getW,Wyz,Wxy,rotates,rotate,to_cells,to_cell,),
-            ('numpy','math',)))
-    peaks=[]
-    for job in jobs:
-        peaks+=job()
+    try:
+        jobs=[]
+        nX=len(X)
+        dn=int(nX/ncpus)+1 
+        n1,n2=-dn,0 
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(get_peaks2,(X[n1:n2],Y,Z0,D,atom_list0,fragment0,p0,fj,h,k,l,
+                fcorrection,Fosum,Fo,na,nb,nc,maxpsi,maxphi),(rou13,add_fragment,getW,Wyz,Wxy,rotates,rotate,to_cells,to_cell,),
+                ('numpy','math',)))
+        peaks=[]
+        for job in jobs:
+            peaks+=job()
+    except:
+        peaks=get_peaks2(X,Y,Z0,D,atom_list0,fragment0,p0,fj,h,k,l,
+                fcorrection,Fosum,Fo,na,nb,nc,maxpsi,maxphi)
 
 
 
@@ -2390,23 +2406,27 @@ def find_fragment_orientations(h,k,l,Fo,A,molecule,Z,atom_list0,
                 sx0,sy0,sz0 = sx0/2,sy0/2,sz0/2 
         return peaks 
 
-    dn=int(n_cut/ncpus)+1
-    n1,n2=-dn,0 
-    jobs=[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        print(n1,n2,n_cut)
-        jobs.append(job_server.submit(refine_peaks3,(peaks[n1:n2],D,atom_list0,fragment0,p0,fj,h,k,l,fcorrection,Fosum,Fo,
-            sx_0,sy_0,sz_0),(refine33,rou13,add_fragment,getW,Wyz,Wxy,rotates,rotate,to_cells,to_cell,),
-            ('numpy','math',),globals=globals()))
+    try:
+        dn=int(n_cut/ncpus)+1
+        n1,n2=-dn,0 
+        jobs=[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            print(n1,n2,n_cut)
+            jobs.append(job_server.submit(refine_peaks3,(peaks[n1:n2],D,atom_list0,fragment0,p0,fj,h,k,l,fcorrection,Fosum,Fo,
+                sx_0,sy_0,sz_0),(refine33,rou13,add_fragment,getW,Wyz,Wxy,rotates,rotate,to_cells,to_cell,),
+                ('numpy','math',),globals=globals()))
 
-    peaks_new=[]
-    i=0
-    for job in jobs:
-        i+=1
-        peaks_new+=job()
-        tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
-        print(i,ncpus,tt)
+        peaks_new=[]
+        i=0
+        for job in jobs:
+            i+=1
+            peaks_new+=job()
+            tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+            print(i,ncpus,tt)
+    except:
+        peaks_new=refine_peaks3(peaks,D,atom_list0,fragment0,p0,fj,h,k,l,fcorrection,Fosum,Fo,
+                sx_0,sy_0,sz_0)
 
     peaks_new.sort(key = lambda s:-s[3])
     peaks=peaks_new[:]
@@ -2661,17 +2681,20 @@ def filt_orientations(h,k,l,Fo,A,molecule,Z,fragment0,atom_list,orientation_file
 
     ss=0.25
     n=len(lines)
-    dn=int(n/ncpus)+1
-    n1,n2,jobs=-dn,0,[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(get_unique,([],[],lines[n1:n2],D,fragment0,A,ss),(get_orientation,
-            get_fragment,add_fragment,abc,put_in_cell,getW,Wyz,Wxy,rotates,rotate,to_cells,
-            to_cell,d_exact,dis_exact,),('numpy','math',)))
+    try:
+        dn=int(n/ncpus)+1
+        n1,n2,jobs=-dn,0,[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(get_unique,([],[],lines[n1:n2],D,fragment0,A,ss),(get_orientation,
+                get_fragment,add_fragment,abc,put_in_cell,getW,Wyz,Wxy,rotates,rotate,to_cells,
+                to_cell,d_exact,dis_exact,),('numpy','math',)))
 
-    uniques=[]
-    for job in jobs:
-        uniques.append(job())
+        uniques=[]
+        for job in jobs:
+            uniques.append(job())
+    except:
+        uniques=[get_unique([],[],lines,D,fragment0,A,ss)]
 
 
     def get_unique2(unique_lines,unique_fragments,lines,D,fragment0,A,ss):
@@ -2994,20 +3017,24 @@ def locate_one_fragment(h,k,l,Fo,A,molecule,Z,fragment0,atom_list,
     na,nb,nc = int(a/s),int(b/s),int(c/s)
 
 
-    n=len(peaks)
-    dn=int(n/ncpus)+1
-    n1,n2,jobs=-dn,0,[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(filtpeaks,(peaks[n1:n2],psi,phi,ita,D,fragment0,solution0,atomj0,A,
-            the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj),
-            (is_good_solution2,rou21,add_fragment,notnear3s,trianglebonding,dis,d_min3,correct,dis_exact,
-                getW,Wyz,Wxy,rotates,rotate,to_cells,to_cell),
-            ('numpy','math')))
+    try:
+        n=len(peaks)
+        dn=int(n/ncpus)+1
+        n1,n2,jobs=-dn,0,[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(filtpeaks,(peaks[n1:n2],psi,phi,ita,D,fragment0,solution0,atomj0,A,
+                the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj),
+                (is_good_solution2,rou21,add_fragment,notnear3s,trianglebonding,dis,d_min3,correct,dis_exact,
+                    getW,Wyz,Wxy,rotates,rotate,to_cells,to_cell),
+                ('numpy','math')))
 
-    peaks_new=[]
-    for job in jobs:
-        peaks_new+=job()  
+        peaks_new=[]
+        for job in jobs:
+            peaks_new+=job() 
+    except:
+        peaks_new=filtpeaks(peaks,psi,phi,ita,D,fragment0,solution0,atomj0,A,
+                the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj) 
     peaks=peaks_new[:] 
 
     # peaks=filtpeaks(peaks,psi,phi,ita,D,fragment0,solution0,atomj0,A,the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj)
@@ -3214,18 +3241,22 @@ def filter_fragment(h,k,l,F2,A,heavy_atom,atom_list,fragment,starttime):
                     peaks.append((x,y,z,ff)) 
         return peaks 
 
-    jobs=[]
-    nX=len(X)
-    dn=int(nX/ncpus)+1 
-    n1,n2=-dn,0 
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(get_peaks4,(X[n1:n2],Y,Z0,h,k,l,f2,Ah1,Bh1,
-            Fosum,Fo,fcorrection,na,nb,nc),
-            (rou24,),('numpy','math',)))
-    peaks=[]
-    for job in jobs:
-        peaks+=job()
+    try:
+        jobs=[]
+        nX=len(X)
+        dn=int(nX/ncpus)+1 
+        n1,n2=-dn,0 
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(get_peaks4,(X[n1:n2],Y,Z0,h,k,l,f2,Ah1,Bh1,
+                Fosum,Fo,fcorrection,na,nb,nc),
+                (rou24,),('numpy','math',)))
+        peaks=[]
+        for job in jobs:
+            peaks+=job()
+    except:
+        peaks=get_peaks4(X,Y,Z0,h,k,l,f2,Ah1,Bh1,
+                Fosum,Fo,fcorrection,na,nb,nc)
 
 
 
@@ -3270,18 +3301,22 @@ def filter_fragment(h,k,l,F2,A,heavy_atom,atom_list,fragment,starttime):
                 sx0,sy0,sz0 = sx0/2,sy0/2,sz0/2 
         return peaks 
 
-    dn=int(n_cut/ncpus)+1
-    n1,n2=-dn,0 
-    jobs=[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(refine_peaks4,(peaks[n1:n2],h,k,l,f2,
-            Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc),(refine34,rou14,),
-            ('numpy',),globals=globals()))
+    try:
+        dn=int(n_cut/ncpus)+1
+        n1,n2=-dn,0 
+        jobs=[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(refine_peaks4,(peaks[n1:n2],h,k,l,f2,
+                Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc),(refine34,rou14,),
+                ('numpy',),globals=globals()))
 
-    peaks_new=[]
-    for job in jobs:
-        peaks_new+=job()
+        peaks_new=[]
+        for job in jobs:
+            peaks_new+=job()
+    except:
+        peaks_new=refine_peaks4(peaks,h,k,l,f2,
+                Ah1,Bh1,Fosum,Fo,fcorrection,na,nb,nc)
 
     peaks_new.sort(key = lambda s:-s[3])
     tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
@@ -3473,18 +3508,22 @@ def find_linear_orientations(h,k,l,Fo,A,molecule,Z,fragment0,p0,
                 peaks.append((x,y,ff)) 
         return peaks 
 
-    jobs=[]
-    nX=len(X)
-    dn=int(nX/ncpus)+1 
-    n1,n2=-dn,0 
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(get_peaks2_L,(X[n1:n2],Y0,D,fragment0,fj,h,k,l,
-            fcorrection,Fosum,Fo,na,nb,maxtheta,p0,atom_list0),(rou13_L,add_linear,to_cell,),
-            ('numpy','math',)))
-    peaks=[]
-    for job in jobs:
-        peaks+=job()
+    try:
+        jobs=[]
+        nX=len(X)
+        dn=int(nX/ncpus)+1 
+        n1,n2=-dn,0 
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(get_peaks2_L,(X[n1:n2],Y0,D,fragment0,fj,h,k,l,
+                fcorrection,Fosum,Fo,na,nb,maxtheta,p0,atom_list0),(rou13_L,add_linear,to_cell,),
+                ('numpy','math',)))
+        peaks=[]
+        for job in jobs:
+            peaks+=job()
+    except:
+        peaks=get_peaks2_L(X,Y0,D,fragment0,fj,h,k,l,
+                fcorrection,Fosum,Fo,na,nb,maxtheta,p0,atom_list0)
 
 
 
@@ -3529,23 +3568,27 @@ def find_linear_orientations(h,k,l,Fo,A,molecule,Z,fragment0,p0,
                 sx0,sy0 = sx0/2,sy0/2
         return peaks 
 
-    dn=int(n_cut/ncpus)+1
-    n1,n2=-dn,0 
-    jobs=[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        print(n1,n2,n_cut)
-        jobs.append(job_server.submit(refine_peaks3_L,(peaks[n1:n2],D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,
-            sx_0,sy_0,p0,atom_list0),(refine33_L,rou13_L,add_linear,to_cell,),
-            ('numpy','math',),globals=globals()))
+    try:
+        dn=int(n_cut/ncpus)+1
+        n1,n2=-dn,0 
+        jobs=[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            print(n1,n2,n_cut)
+            jobs.append(job_server.submit(refine_peaks3_L,(peaks[n1:n2],D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,
+                sx_0,sy_0,p0,atom_list0),(refine33_L,rou13_L,add_linear,to_cell,),
+                ('numpy','math',),globals=globals()))
 
-    peaks_new=[]
-    i=0
-    for job in jobs:
-        i+=1
-        peaks_new+=job()
-        tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
-        print(i,ncpus,tt)
+        peaks_new=[]
+        i=0
+        for job in jobs:
+            i+=1
+            peaks_new+=job()
+            tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
+            print(i,ncpus,tt)
+    except:
+        peaks_new=refine_peaks3_L(peaks,D,fragment0,fj,h,k,l,fcorrection,Fosum,Fo,
+                sx_0,sy_0,p0,atom_list0)
 
     peaks_new.sort(key = lambda s:-s[2])
     peaks=peaks_new[:]
@@ -3832,21 +3875,24 @@ def locate_one_linear_fragment(h,k,l,Fo,A,molecule,Z,fragment0,atom_list,
     s=0.4
     na,nb,nc = int(a/s),int(b/s),int(c/s)
 
+    try:
+        n=len(peaks)
+        dn=int(n/ncpus)+1
+        n1,n2,jobs=-dn,0,[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(filtpeaks_L,(peaks[n1:n2],theta,phi,D,fragment0,solution0,atomj0,A,
+                the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj),
+                (is_good_solution2_L,rou21_L,add_linear,notnear3s,trianglebonding,dis,d_min3,correct,dis_exact,
+                    to_cell),
+                ('numpy','math')))
 
-    n=len(peaks)
-    dn=int(n/ncpus)+1
-    n1,n2,jobs=-dn,0,[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(filtpeaks_L,(peaks[n1:n2],theta,phi,D,fragment0,solution0,atomj0,A,
-            the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj),
-            (is_good_solution2_L,rou21_L,add_linear,notnear3s,trianglebonding,dis,d_min3,correct,dis_exact,
-                to_cell),
-            ('numpy','math')))
-
-    peaks_new=[]
-    for job in jobs:
-        peaks_new+=job()  
+        peaks_new=[]
+        for job in jobs:
+            peaks_new+=job()  
+    except:
+        peaks_new=filtpeaks_L(peaks,theta,phi,D,fragment0,solution0,atomj0,A,
+                the_heavy,atom_list,h,k,l,fcorrection,Fo,Fosum,fj)
     peaks=peaks_new[:] 
 
 
@@ -4235,17 +4281,20 @@ def find_corrected_peaks2(h,k,l,F2,A,atom_list,heavy_atom,heavy_label,Nheavy,
     Y = numpy.array([i/nb for i in range(nb)])
     Z0 = numpy.array([i/nc for i in range(-1,nc+1)])
 
-    jobs=[]
-    nX=len(X)
-    dn=int(nX/ncpus)+1 
-    n1,n2=-dn,0 
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(get_peaks15,(X[n1:n2],Y,Z0,dF,h,k,l,phi,na,nb,nc),
-            (rou25,),('numpy','math',)))
-    peaks=[]
-    for job in jobs:
-        peaks+=job()
+    try:
+        jobs=[]
+        nX=len(X)
+        dn=int(nX/ncpus)+1 
+        n1,n2=-dn,0 
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(get_peaks15,(X[n1:n2],Y,Z0,dF,h,k,l,phi,na,nb,nc),
+                (rou25,),('numpy','math',)))
+        peaks=[]
+        for job in jobs:
+            peaks+=job()
+    except:
+        peaks=get_peaks15(X,Y,Z0,dF,h,k,l,phi,na,nb,nc)
 
 
 
@@ -4260,17 +4309,20 @@ def find_corrected_peaks2(h,k,l,F2,A,atom_list,heavy_atom,heavy_label,Nheavy,
     tt='('+time.strftime('%Y-%m-%d, %H:%M:%S',time.localtime())+') '+str(round(time.time()-starttime,1))
     print('refine peaks... ', time.time()-starttime,tt)
 
-    dn=int(n_cut/ncpus)+1
-    n1,n2=-dn,0 
-    jobs=[]
-    for i in range(ncpus):
-        n1,n2=n1+dn,n2+dn 
-        jobs.append(job_server.submit(refine_peaks25,(peaks[n1:n2],dF,h,k,l,phi,na,nb,nc),(refine35,rou15,),
-            ('numpy',),globals=globals()))
+    try:
+        dn=int(n_cut/ncpus)+1
+        n1,n2=-dn,0 
+        jobs=[]
+        for i in range(ncpus):
+            n1,n2=n1+dn,n2+dn 
+            jobs.append(job_server.submit(refine_peaks25,(peaks[n1:n2],dF,h,k,l,phi,na,nb,nc),(refine35,rou15,),
+                ('numpy',),globals=globals()))
 
-    peaks_new=[]
-    for job in jobs:
-        peaks_new+=job()
+        peaks_new=[]
+        for job in jobs:
+            peaks_new+=job()
+    except:
+        peaks_new=refine_peaks25(peaks,dF,h,k,l,phi,na,nb,nc)
 
     peaks_new.sort(key = lambda s:-s[3])
     peaks=peaks_new[:]
